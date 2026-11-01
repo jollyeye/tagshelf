@@ -437,6 +437,7 @@ func (s *Server) apiPrefs(r *http.Request, in struct {
 	WatchDownloads *bool
 	WatchDirs      *[]string
 	WatchDrive     *bool
+	Unblock        *bool
 	Background     *bool
 	Autostart      *bool
 }) (any, error) {
@@ -445,6 +446,9 @@ func (s *Server) apiPrefs(r *http.Request, in struct {
 	s.lib.mu.RUnlock()
 	if in.WatchDownloads != nil {
 		p.WatchDownloads = *in.WatchDownloads
+	}
+	if in.Unblock != nil {
+		p.Unblock = *in.Unblock
 	}
 	if in.WatchDrive != nil {
 		p.NoDriveWatch = !*in.WatchDrive
@@ -542,6 +546,12 @@ func (s *Server) apiDownloadDone(r *http.Request, in struct {
 		if _, err := s.lib.TagPaths([]string{path}, in.Tags, nil); err != nil {
 			return nil, err
 		}
+	}
+	s.lib.mu.RLock()
+	unblock := s.lib.Prefs.Unblock
+	s.lib.mu.RUnlock()
+	if unblock {
+		os.Remove(path + ":Zone.Identifier") // only the internet mark; the picture itself is untouched
 	}
 	s.watch.Drop(in.ID, false)
 	return map[string]any{"path": path, "all": s.lib.TagList()}, nil

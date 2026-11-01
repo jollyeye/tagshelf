@@ -73,6 +73,7 @@ type Prefs struct {
 	WatchDownloads bool     `json:"watchDownloads"`
 	WatchDirs      []string `json:"watchDirs"`
 	Background     bool     `json:"background"`
+	Unblock        bool     `json:"unblock"`      // remove the "downloaded from the internet" mark once a download has been tagged
 	NoDriveWatch   bool     `json:"noDriveWatch"` // false (default): watch every folder of every drive for downloaded pictures/videos
 }
 

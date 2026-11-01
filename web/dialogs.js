@@ -68,6 +68,8 @@ function openSettings() {
         'A small window opens with suggested tags, whichever browser you use.'),
       chk('Watch the whole drive (any folder I save to)', !S.prefs.noDriveWatch, async (v) => { await setPrefs({ WatchDrive: v }); drawDirs(); },
         'Catches downloads wherever you choose to save them. Only pictures and videos that Windows marks as “downloaded from the internet” are offered (Edge, Chrome, Firefox and Brave all add that mark on NTFS drives); files you copy or create yourself are ignored. Turn it off to watch only the folders below.'),
+      chk('Remove the “downloaded from the internet” mark after I tag a download', S.prefs.unblock, async (v) => { await setPrefs({ Unblock: v }); },
+        'Stops Windows from warning “this file may be unsafe” whenever the picture is opened. The picture itself is not changed.'),
       h('div', {}, h('div', { class: 'sh' }, 'Extra folders to watch (offered even without the mark)'), dirBox, h('div', { class: 'row', style: { marginTop: '6px' } }, addIn,
         S.os === 'windows' ? h('button', { class: 'btn', onclick: async () => { try { const r = await api('/api/pick', {}); if (r.path) addDir(r.path); } catch (e) { fail(e); } } }, 'Browse…') : null,
         h('button', { class: 'btn', onclick: () => addDir(addIn.value) }, 'Add'))),

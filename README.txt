@@ -35,6 +35,8 @@ DOWNLOADS
   the folders you list under Settings > Downloads (those are offered even without the mark).
   For this to work while the main window is closed, TagShelf keeps running quietly in the background - it
   asks you once. Use "Quit TagShelf" (bottom left) to stop it.
+  Windows may warn "this file may be unsafe" when you open a downloaded picture. Settings > Downloads has
+  "Remove the 'downloaded from the internet' mark after I tag a download" to stop that (off by default).
 
 EXTRAS: undo (Ctrl+Z) for rename/move/tag changes - find duplicate files - batch rename -
   find similar pictures - ratings - group by tag/type/year/month/rating - saved filters -

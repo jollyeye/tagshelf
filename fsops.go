@@ -468,7 +468,9 @@ func openPath(path string, reveal bool) error {
 		case isDir:
 			cmd = exec.Command("explorer.exe", path)
 		default:
-			cmd = exec.Command("rundll32.exe", "url.dll,FileProtocolHandler", path)
+			// Explorer opens it exactly as a double-click in Explorer would (rundll32 made Windows treat
+			// downloaded pictures as coming from an unsafe location)
+			cmd = exec.Command("explorer.exe", path)
 		}
 	case "darwin":
 		if reveal {
