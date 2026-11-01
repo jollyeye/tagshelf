@@ -1,0 +1,4 @@
+tagshelf*
+*.exe
+*.test
+library*.json
