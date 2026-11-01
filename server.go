@@ -436,6 +436,7 @@ func (s *Server) apiList(r *http.Request, _ none) (any, error) {
 func (s *Server) apiPrefs(r *http.Request, in struct {
 	WatchDownloads *bool
 	WatchDirs      *[]string
+	WatchDrive     *bool
 	Background     *bool
 	Autostart      *bool
 }) (any, error) {
@@ -444,6 +445,9 @@ func (s *Server) apiPrefs(r *http.Request, in struct {
 	s.lib.mu.RUnlock()
 	if in.WatchDownloads != nil {
 		p.WatchDownloads = *in.WatchDownloads
+	}
+	if in.WatchDrive != nil {
+		p.NoDriveWatch = !*in.WatchDrive
 	}
 	if in.WatchDirs != nil {
 		var dirs []string

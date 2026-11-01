@@ -27,10 +27,14 @@ TAG SUGGESTIONS (they only suggest - nothing is applied until you click)
   Menu (sliders icon) > "Suggest tags for the untagged files here" lets you review a whole folder.
 
 DOWNLOADS
-  When a picture or video finishes downloading (in any browser) into your Downloads folder, a small
-  window offers suggested tags, plus an optional "move it to a folder". For this to work while the main
-  window is closed, TagShelf keeps running quietly in the background - it asks you once. Use
-  "Quit TagShelf" (bottom left) to stop it. Folders to watch: Settings > Downloads.
+  When a picture or video finishes downloading, a small window offers suggested tags, plus an
+  optional "move it to a folder". It works whichever browser you use and WHICHEVER folder you save to:
+  TagShelf watches the whole drive ("Watch the whole drive" in Settings, on by default) and only offers
+  files that Windows marked as "downloaded from the internet" (Edge, Chrome, Firefox and Brave add that
+  mark on NTFS drives). Pictures you copy or create yourself are ignored. Turn the option off to watch only
+  the folders you list under Settings > Downloads (those are offered even without the mark).
+  For this to work while the main window is closed, TagShelf keeps running quietly in the background - it
+  asks you once. Use "Quit TagShelf" (bottom left) to stop it.
 
 EXTRAS: undo (Ctrl+Z) for rename/move/tag changes - find duplicate files - batch rename -
   find similar pictures - ratings - group by tag/type/year/month/rating - saved filters -

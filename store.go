@@ -73,6 +73,7 @@ type Prefs struct {
 	WatchDownloads bool     `json:"watchDownloads"`
 	WatchDirs      []string `json:"watchDirs"`
 	Background     bool     `json:"background"`
+	NoDriveWatch   bool     `json:"noDriveWatch"` // false (default): watch every folder of every drive for downloaded pictures/videos
 }
 
 type Library struct {

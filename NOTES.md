@@ -14,7 +14,7 @@ Portable Windows file browser where every file can have many tags. Owner: jollye
 - store.go: library.json (v2). Sparse per-file records keyed by sha1(path), only for files with tags/ratings. Also tags, views, pins, prefs, rejected suggestions. Migrates v1 (keeps backup library.v1.backup.json).
 - fsops.go: list/tree/mkdir/rename/move/copy/trash/open. Tags follow in-app moves; outside moves are relinked by name|size|mtime.
 - ai.go: suggestions. NOT a neural net: 152-dim image fingerprint (computed in the browser, stored in vectors.bin) -> kNN over tagged files + file/folder name words + tag co-occurrence. Needs ~6 tagged files. Suggest-only; rejections are remembered.
-- watch.go: download watcher (polls every 1.5s, ignores partial files, needs 2 stable polls, baseline at start). Opens popup.html in a separate small window.
+- watch.go: download watcher. Two sources: (a) whole-drive mode (default, pref `noDriveWatch=false`): watch_windows.go uses ReadDirectoryChangesW on every fixed/removable drive for new/renamed-in media files; a file is offered after it is size/mtime stable for 2 ticks AND has a Zone.Identifier stream with ZoneId=3/4 (Mark of the Web), was created <12h ago, is untagged, and is not under Windows/AppData/Program Files/TagShelf data. (b) folder polling of `watchDirs` (no mark needed; the default Downloads folder is only polled when whole-drive mode is off). watch_other.go is a Linux test stand-in (env TAGSHELF_WATCH_ROOT, `<file>:Zone.Identifier` sidecar file). Opens popup.html in a separate small window.
 - dups.go: duplicate finder (size -> 64KiB head hash -> full SHA-1).
 - thumbs.go, drives_*.go, hidden_*.go, proc_*.go: thumbnails and OS specifics (windows vs other).
 
@@ -29,6 +29,7 @@ index.html loads: common, ui, state, nav, content, side, viewer, dialogs, downlo
 Windows: %AppData%\TagShelf (library.json, thumbs\, vectors.bin). Recycle Bin via PowerShell SendToRecycleBin.
 
 ## Known limits
+- Whole-drive watch (ReadDirectoryChangesW + Zone.Identifier) was only tested with the Linux stand-in; the Windows code compiles but has never run.
 - Never run on real Windows by the author (tested on Linux + Windows cross-compile only). Untested there: Recycle Bin, autostart (HKCU Run), reveal in Explorer, app window, download popup.
 - Downloads made while the app is not running are not offered later.
 - The AI is lightweight; no neural model could be downloaded in the dev sandbox.

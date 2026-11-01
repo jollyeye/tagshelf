@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -32,11 +33,21 @@ type Watcher struct {
 	seen      map[string]bool
 	baselined map[string]bool
 	cands     map[string]cand
+	ev        map[string]*evCand // files reported by the whole-drive watcher, waiting to settle
 	pending   []Download
 }
 
+// evCand is a media file the whole-drive watcher saw appear; it is offered once it has stopped growing
+// and carries the "downloaded from the internet" mark.
+type evCand struct {
+	size, mtime int64
+	stable      int
+	markTries   int
+	first       time.Time
+}
+
 func newWatcher(s *Server) *Watcher {
-	return &Watcher{s: s, seen: map[string]bool{}, baselined: map[string]bool{}, cands: map[string]cand{}}
+	return &Watcher{s: s, seen: map[string]bool{}, baselined: map[string]bool{}, cands: map[string]cand{}, ev: map[string]*evCand{}}
 }
 
 func (w *Watcher) Pending() []Download {
@@ -79,6 +90,7 @@ func (w *Watcher) Drop(id string, all bool) {
 }
 
 func (w *Watcher) run() {
+	go startDriveWatch(w)
 	t := time.NewTicker(1500 * time.Millisecond)
 	defer t.Stop()
 	for {
@@ -100,6 +112,9 @@ func (w *Watcher) dirs() []string {
 	}
 	if len(p.WatchDirs) > 0 {
 		return p.WatchDirs
+	}
+	if !p.NoDriveWatch {
+		return nil // the whole drive is watched instead of one default folder
 	}
 	if d := defaultDownloads(); d != "" {
 		return []string{d}
@@ -153,6 +168,7 @@ func (w *Watcher) scan() {
 		}
 		w.baselined[d] = true
 	}
+	fresh = append(fresh, w.settleEvents()...)
 	if len(fresh) > 0 {
 		sort.Slice(fresh, func(i, j int) bool { return fresh[i].Name < fresh[j].Name })
 		w.pending = append(w.pending, fresh...)
@@ -194,4 +210,83 @@ func (s *Server) ensurePopup() {
 		return
 	}
 	openPopup(s.dataDir, url)
+}
+
+func (w *Watcher) driveOn() bool {
+	w.s.lib.mu.RLock()
+	defer w.s.lib.mu.RUnlock()
+	return w.s.lib.Prefs.WatchDownloads && !w.s.lib.Prefs.NoDriveWatch
+}
+
+// noteFile is called by the whole-drive watcher for every file that appeared or was renamed into place.
+// It only does cheap checks; the real decision is made in settleEvents once the file has settled.
+func (w *Watcher) noteFile(p string) {
+	ext := lowerExt(p)
+	if k := kindOf(ext); (k != "image" && k != "video") || ext == ".svg" {
+		return
+	}
+	if excludedPath(p, w.s.dataDir) || !w.driveOn() {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.seen[p] || w.ev[p] != nil || len(w.ev) > 5000 {
+		return
+	}
+	w.ev[p] = &evCand{first: time.Now()}
+}
+
+// settleEvents is called with w.mu held. It returns the files that are now ready to be offered.
+func (w *Watcher) settleEvents() []Download {
+	var out []Download
+	for p, c := range w.ev {
+		info, err := os.Stat(p)
+		if err != nil || info.IsDir() {
+			if time.Since(c.first) > 30*time.Second {
+				delete(w.ev, p) // renamed away or removed
+			}
+			continue
+		}
+		if c.size == info.Size() && c.mtime == info.ModTime().UnixNano() && c.size > 0 {
+			c.stable++
+		} else {
+			c.size, c.mtime, c.stable = info.Size(), info.ModTime().UnixNano(), 0
+		}
+		if c.stable < 2 {
+			if time.Since(c.first) > 30*time.Minute {
+				delete(w.ev, p)
+			}
+			continue
+		}
+		if time.Since(createdAt(info)) > 12*time.Hour || w.s.lib.Lookup(p) != nil {
+			delete(w.ev, p) // an old file that was only moved around, or one that already has tags
+			continue
+		}
+		if !hasWebMark(p) {
+			// the browser may add the mark a moment after the file is in place
+			if c.markTries++; c.markTries > 12 {
+				delete(w.ev, p)
+			}
+			continue
+		}
+		delete(w.ev, p)
+		w.seen[p] = true
+		k := kindOf(lowerExt(p))
+		out = append(out, Download{ID: randHex(6), Path: p, Name: filepath.Base(p), Kind: k, Size: info.Size(), At: time.Now().Unix()})
+	}
+	return out
+}
+
+// excludedPath keeps system folders, app caches and TagShelf's own data out of the whole-drive watch.
+func excludedPath(p, dataDir string) bool {
+	q := toLower(filepath.ToSlash(p))
+	if dataDir != "" && strings.HasPrefix(q, toLower(filepath.ToSlash(dataDir))+"/") {
+		return true
+	}
+	for _, bad := range []string{"/windows/", "/$recycle.bin/", "/system volume information/", "/appdata/", "/program files", "/programdata/"} {
+		if strings.Contains(q, bad) {
+			return true
+		}
+	}
+	return false
 }

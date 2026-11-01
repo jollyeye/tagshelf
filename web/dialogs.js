@@ -29,7 +29,7 @@ function openSettings() {
     const dirs = (S.prefs && S.prefs.watchDirs) || [];
     dirBox.replaceChildren(...(dirs.length ? dirs.map((d) => h('div', { class: 'd' }, h('span', { title: d }, d),
       h('button', { class: 'ibtn', title: 'Stop watching', onclick: async () => { await setPrefs({ WatchDirs: dirs.filter((x) => x !== d) }); drawDirs(); } }, icon('x', 14))))
-      : [h('div', { class: 'd' }, h('span', {}, (S.downloads || 'Downloads') + '  (default)'))]));
+      : [h('div', { class: 'd' }, h('span', {}, S.prefs.noDriveWatch ? (S.downloads || 'Downloads') + '  (default)' : 'None - the whole drive is watched'))]));
   };
   drawDirs();
   const addIn = h('input', { class: 'txt', type: 'text', placeholder: 'Another folder to watch, e.g. D:\\Downloads', spellcheck: 'false' });
@@ -65,8 +65,10 @@ function openSettings() {
       } }, 'Test how well it does')), aiRes),
     h('div', { class: 'sect' }, h('h4', {}, 'Downloads'),
       chk('Ask me for tags when a picture or video finishes downloading', S.prefs.watchDownloads, async (v) => { await setPrefs({ WatchDownloads: v }); },
-        'A small window opens with suggested tags. Works with any browser that saves into the folders below.'),
-      h('div', {}, h('div', { class: 'sh' }, 'Folders to watch'), dirBox, h('div', { class: 'row', style: { marginTop: '6px' } }, addIn,
+        'A small window opens with suggested tags, whichever browser you use.'),
+      chk('Watch the whole drive (any folder I save to)', !S.prefs.noDriveWatch, async (v) => { await setPrefs({ WatchDrive: v }); drawDirs(); },
+        'Catches downloads wherever you choose to save them. Only pictures and videos that Windows marks as “downloaded from the internet” are offered (Edge, Chrome, Firefox and Brave all add that mark on NTFS drives); files you copy or create yourself are ignored. Turn it off to watch only the folders below.'),
+      h('div', {}, h('div', { class: 'sh' }, 'Extra folders to watch (offered even without the mark)'), dirBox, h('div', { class: 'row', style: { marginTop: '6px' } }, addIn,
         S.os === 'windows' ? h('button', { class: 'btn', onclick: async () => { try { const r = await api('/api/pick', {}); if (r.path) addDir(r.path); } catch (e) { fail(e); } } }, 'Browse…') : null,
         h('button', { class: 'btn', onclick: () => addDir(addIn.value) }, 'Add'))),
       chk('Keep TagShelf running in the background after I close the window', S.prefs.background, async (v) => { await setPrefs({ Background: v }); },
