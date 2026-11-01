@@ -462,14 +462,17 @@ func openPath(path string, reveal bool) error {
 	isDir := st != nil && st.IsDir()
 	switch runtime.GOOS {
 	case "windows":
+		claimForeground()
 		switch {
 		case reveal && !isDir:
 			cmd = exec.Command("explorer.exe", "/select,", path)
 		case isDir:
 			cmd = exec.Command("explorer.exe", path)
 		default:
-			// Explorer opens it exactly as a double-click in Explorer would (rundll32 made Windows treat
-			// downloaded pictures as coming from an unsafe location)
+			// same as a double-click in Explorer; claims the right to come to the front first
+			if shellOpen(path) {
+				return nil
+			}
 			cmd = exec.Command("explorer.exe", path)
 		}
 	case "darwin":
