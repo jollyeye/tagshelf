@@ -303,9 +303,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/downloads/done", api(s.apiDownloadDone))
 	mux.HandleFunc("POST /api/downloads/skip", api(func(r *http.Request, in struct {
 		ID  string
+		IDs []string
 		All bool
 	}) (any, error) {
 		s.watch.Drop(in.ID, in.All)
+		for _, id := range in.IDs {
+			s.watch.Drop(id, false)
+		}
 		return ok, nil
 	}))
 
@@ -513,18 +517,35 @@ func (s *Server) apiAIVec(r *http.Request, in struct {
 
 func (s *Server) apiDownloadDone(r *http.Request, in struct {
 	ID     string
+	IDs    []string
 	Tags   []string
 	MoveTo string
 }) (any, error) {
-	it := s.watch.Find(in.ID)
-	if it == nil {
-		return nil, errors.New("that download is no longer in the list")
+	ids := in.IDs
+	if in.ID != "" {
+		ids = append(ids, in.ID)
 	}
-	path := it.Path
-	if !exists(path) {
-		s.watch.Drop(in.ID, false)
-		return nil, errors.New("the file has been moved or deleted")
+	if len(ids) == 0 {
+		return nil, errors.New("nothing selected")
 	}
+	var paths []string
+	var okIDs []string
+	for _, id := range ids {
+		it := s.watch.Find(id)
+		if it == nil {
+			continue
+		}
+		if !exists(it.Path) {
+			s.watch.Drop(id, false)
+			continue
+		}
+		paths = append(paths, it.Path)
+		okIDs = append(okIDs, id)
+	}
+	if len(paths) == 0 {
+		return nil, errors.New("those downloads are no longer in the list")
+	}
+	final := paths
 	if strings.TrimSpace(in.MoveTo) != "" {
 		d, err := cleanAbs(in.MoveTo)
 		if err != nil {
@@ -533,17 +554,26 @@ func (s *Server) apiDownloadDone(r *http.Request, in struct {
 		if st, err := os.Stat(d); err != nil || !st.IsDir() {
 			return nil, errors.New("the folder to move to doesn't exist")
 		}
-		res := moveEntries(s.lib, []string{path}, d)
-		if len(res.Errors) > 0 {
+		res := moveEntries(s.lib, paths, d)
+		if len(res.Errors) > 0 && len(res.Done) == 0 {
 			return nil, errors.New(res.Errors[0])
 		}
-		if len(res.Done) > 0 {
-			path = res.Done[0].To
+		moved := map[string]string{}
+		for _, m := range res.Done {
+			moved[m.From] = m.To
+		}
+		final = make([]string, len(paths))
+		for i, p := range paths {
+			if to, ok := moved[p]; ok {
+				final[i] = to
+			} else {
+				final[i] = p
+			}
 		}
 		s.lib.AddRecentDir(d)
 	}
 	if len(in.Tags) > 0 {
-		if _, err := s.lib.TagPaths([]string{path}, in.Tags, nil); err != nil {
+		if _, err := s.lib.TagPaths(final, in.Tags, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -551,10 +581,14 @@ func (s *Server) apiDownloadDone(r *http.Request, in struct {
 	unblock := s.lib.Prefs.Unblock
 	s.lib.mu.RUnlock()
 	if unblock {
-		os.Remove(path + ":Zone.Identifier") // only the internet mark; the picture itself is untouched
+		for _, p := range final {
+			os.Remove(p + ":Zone.Identifier") // only the internet mark; the picture itself is untouched
+		}
 	}
-	s.watch.Drop(in.ID, false)
-	return map[string]any{"path": path, "all": s.lib.TagList()}, nil
+	for _, id := range okIDs {
+		s.watch.Drop(id, false)
+	}
+	return map[string]any{"path": final[0], "paths": final, "count": len(final), "all": s.lib.TagList()}, nil
 }
 
 func (s *Server) handlePick(w http.ResponseWriter, r *http.Request) {

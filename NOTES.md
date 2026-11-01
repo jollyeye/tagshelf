@@ -25,6 +25,10 @@ index.html loads: common, ui, state, nav, content, side, viewer, dialogs, downlo
 - side.js: right panel (Tags tab and Filter tab). viewer.js: image/video viewer.
 - dialogs.js: settings, tag manager, duplicates, batch rename, review, similar, help. downloads.js + popup.js: the download tag popup.
 
+- tray_windows.go: system tray icon (raw Win32: hidden window + Shell_NotifyIcon, icon drawn in memory). Click = open window, right-click = Open/Quit. Never run on real Windows yet.
+- Download popup (web/downloads.js): grid of all pending downloads with click/Ctrl/Shift/rubber-band selection; /api/downloads/done and /skip accept `IDs` for batch tagging/moving.
+- Windows quirks learned: never start explorer.exe with hideWindow (the window stays invisible); open files with ShellExecute after claimForeground(); a click right after a rubber-band drag must not clear the selection.
+
 ## Data
 Windows: %AppData%\TagShelf (library.json, thumbs\, vectors.bin). Recycle Bin via PowerShell SendToRecycleBin.
 

@@ -454,6 +454,7 @@ function initContent() {
   const c = $('#content');
   const pathOf = (el) => { const t = el.closest('[data-p]'); return t ? t.dataset.p : null; };
   c.addEventListener('click', (ev) => {
+    if (MARQUEE.justDragged) return; // the click that ends a rubber-band drag must not clear the selection
     if (ev.target.closest('.ghead') || ev.target.closest('.lhead')) return;
     const p = pathOf(ev.target);
     if (!p) { if (!ev.target.closest('.empty, .err-box')) { S.sel = new Set(); S.anchor = null; selectionChanged(); } return; }
@@ -504,11 +505,28 @@ function initContent() {
 }
 
 // rubber-band selection from empty space
+const MARQUEE = { justDragged: false };
 function initMarquee(c) {
   let box = null, sx = 0, sy = 0, base = null, active = false, raf = 0, last = null;
+  const update = () => {
+    raf = 0;
+    if (!box || !last) return;
+    const x1 = Math.min(sx, last.clientX), x2 = Math.max(sx, last.clientX), y1 = Math.min(sy, last.clientY), y2 = Math.max(sy, last.clientY);
+    Object.assign(box.style, { left: x1 + 'px', top: y1 + 'px', width: x2 - x1 + 'px', height: y2 - y1 + 'px' });
+    const cr = c.getBoundingClientRect();
+    const next = new Set(base);
+    for (const el of $$('#content [data-p]')) {
+      const r = el.getBoundingClientRect();
+      if (r.bottom < cr.top || r.top > cr.bottom) continue;
+      if (r.left < x2 && r.right > x1 && r.top < y2 && r.bottom > y1) next.add(el.dataset.p);
+    }
+    S.sel = next; paintSel();
+  };
   c.addEventListener('mousedown', (ev) => {
     if (ev.button !== 0 || ev.target.closest('[data-p], .lhead, .ghead, button, a')) return;
     if (ev.offsetX > c.clientWidth || ev.target !== c && !ev.target.matches('.grid, .list, .sentinel')) return;
+    ev.preventDefault(); // no text selection while rubber-banding
+    c.focus({ preventScroll: true });
     active = true; sx = ev.clientX; sy = ev.clientY;
     base = ev.ctrlKey || ev.metaKey ? new Set(S.sel) : new Set();
   });
@@ -519,25 +537,12 @@ function initMarquee(c) {
       box = h('div', { class: 'marquee' }); document.body.append(box);
     }
     last = ev;
-    if (raf) return;
-    raf = requestAnimationFrame(() => {
-      raf = 0;
-      const x1 = Math.min(sx, last.clientX), x2 = Math.max(sx, last.clientX), y1 = Math.min(sy, last.clientY), y2 = Math.max(sy, last.clientY);
-      Object.assign(box.style, { left: x1 + 'px', top: y1 + 'px', width: x2 - x1 + 'px', height: y2 - y1 + 'px' });
-      const cr = c.getBoundingClientRect();
-      const next = new Set(base);
-      for (const el of $$('#content [data-p]')) {
-        const r = el.getBoundingClientRect();
-        if (r.bottom < cr.top || r.top > cr.bottom) continue;
-        if (r.left < x2 && r.right > x1 && r.top < y2 && r.bottom > y1) next.add(el.dataset.p);
-      }
-      S.sel = next; paintSel();
-    });
+    if (!raf) raf = requestAnimationFrame(update);
   });
   addEventListener('mouseup', () => {
     if (!active) return;
     active = false;
-    if (box) { box.remove(); box = null; S.anchor = S.focus = S.sel.values().next().value || null; renderSide(); renderStatus(); }
+    if (box) { if (raf) cancelAnimationFrame(raf); update(); box.remove(); box = null; MARQUEE.justDragged = true; setTimeout(() => { MARQUEE.justDragged = false; }, 50); S.anchor = S.focus = S.sel.values().next().value || null; renderSide(); renderStatus(); }
   });
 }
 

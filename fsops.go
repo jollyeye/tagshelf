@@ -462,18 +462,22 @@ func openPath(path string, reveal bool) error {
 	isDir := st != nil && st.IsDir()
 	switch runtime.GOOS {
 	case "windows":
+		// Explorer windows must NOT be started hidden (hideWindow would make them invisible)
 		claimForeground()
 		switch {
 		case reveal && !isDir:
-			cmd = exec.Command("explorer.exe", "/select,", path)
+			return explorerSelect(path)
 		case isDir:
-			cmd = exec.Command("explorer.exe", path)
-		default:
-			// same as a double-click in Explorer; claims the right to come to the front first
 			if shellOpen(path) {
 				return nil
 			}
-			cmd = exec.Command("explorer.exe", path)
+			return explorerOpen(path)
+		default:
+			// same as a double-click in Explorer
+			if shellOpen(path) {
+				return nil
+			}
+			return explorerOpen(path)
 		}
 	case "darwin":
 		if reveal {

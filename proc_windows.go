@@ -40,3 +40,24 @@ func shellOpen(path string) bool {
 	r, _, _ := procShellExecuteW.Call(0, uintptr(unsafe.Pointer(verb)), uintptr(unsafe.Pointer(file)), 0, 0, swShowNormal)
 	return r > 32
 }
+
+// explorerSelect shows a file selected inside an Explorer window.
+func explorerSelect(path string) error {
+	cmd := exec.Command("explorer.exe")
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `explorer.exe /select,"` + path + `"`}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait()
+	return nil
+}
+
+// explorerOpen opens a file or folder through Explorer (visible window).
+func explorerOpen(path string) error {
+	cmd := exec.Command("explorer.exe", path)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait()
+	return nil
+}

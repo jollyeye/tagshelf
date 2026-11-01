@@ -34,7 +34,10 @@ DOWNLOADS
   mark on NTFS drives). Pictures you copy or create yourself are ignored. Turn the option off to watch only
   the folders you list under Settings > Downloads (those are offered even without the mark).
   For this to work while the main window is closed, TagShelf keeps running quietly in the background - it
-  asks you once. Use "Quit TagShelf" (bottom left) to stop it.
+  asks you once. While TagShelf runs there is an icon in the Windows notification area (system tray):
+  click it to open the window, right-click it for "Quit TagShelf". (You may have to click the little ^ arrow.)
+  Many downloads at once: the popup shows them all as a grid - select some (click, Ctrl/Shift+click, drag a
+  box, "Select all") and tag or move them together.
   Windows may warn "this file may be unsafe" when you open a downloaded picture. Settings > Downloads has
   "Remove the 'downloaded from the internet' mark after I tag a download" to stop that (off by default).
 

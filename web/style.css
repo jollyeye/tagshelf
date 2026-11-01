@@ -311,3 +311,16 @@ body.popup { overflow-y: auto; }
 .dl-foot { display: flex; gap: 8px; margin-top: 18px; padding: 10px 0 12px; position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); }
 .dlg .dl-foot { background: transparent; position: static; }
 .dl .sh { margin-bottom: 6px; }
+
+/* many downloads at once: selectable grid */
+.dl-gridbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; max-height: 270px; overflow-y: auto; padding: 8px; margin-bottom: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 11px; user-select: none; }
+.dtile { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 2px solid transparent; background: var(--elev); cursor: default; }
+.dtile img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.dtile .vid { width: 100%; height: 100%; display: grid; place-items: center; color: var(--muted); }
+.dtile .tick { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; display: none; place-items: center; }
+.dtile.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.dtile.on .tick { display: grid; }
+.dtile:not(.on) img { opacity: .78; }
+.dl-info { margin-bottom: 12px; }
+.dl-info .dl-pv img, .dl-info .dl-pv video { max-height: 200px; }

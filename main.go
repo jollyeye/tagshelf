@@ -103,6 +103,9 @@ func main() {
 
 	go lib.CheckMissing()
 	go srv.watch.run()
+	if !noWindowMode {
+		go startTray(srv, inst.url())
+	}
 
 	switch {
 	case noWindowMode:
@@ -284,7 +287,7 @@ func openWindow(dataDir, url string) {
 // openPopup shows the small "tag this download" window. It uses its own browser profile so
 // that the requested window size is honoured even while the main window is open.
 func openPopup(dataDir, url string) {
-	if launchApp(filepath.Join(dataDir, "browser-popup"), url, "--window-size=500,720") {
+	if launchApp(filepath.Join(dataDir, "browser-popup"), url, "--window-size=640,860") {
 		return
 	}
 	openWindow(dataDir, url)
