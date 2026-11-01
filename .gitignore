@@ -1,4 +1,5 @@
 tagshelf*
+!downloads/
 *.exe
 *.test
 library*.json
