@@ -324,3 +324,27 @@ body.popup { overflow-y: auto; }
 .dtile:not(.on) img { opacity: .78; }
 .dl-info { margin-bottom: 12px; }
 .dl-info .dl-pv img, .dl-info .dl-pv video { max-height: 200px; }
+
+/* folder previews */
+.tile .thumb .fcov { position: absolute; inset: 8px; border-radius: 8px; overflow: hidden; display: grid; gap: 3px; background: var(--bg); }
+.thumb.hascov .big { display: none; }
+.fcov.n1 { grid-template: 1fr / 1fr; }
+.fcov.n2 { grid-template: 1fr / 1fr 1fr; }
+.fcov.n3 { grid-template: 1fr 1fr / 1.4fr 1fr; }
+.fcov.n3 .cc:first-child { grid-row: 1 / 3; }
+.fcov.n4 { grid-template: 1fr 1fr / 1fr 1fr; }
+.cc { position: relative; overflow: hidden; background: var(--elev); min-width: 0; min-height: 0; }
+.cc img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.cc .cc-ico { width: 100%; height: 100%; display: grid; place-items: center; color: var(--muted); }
+.cc .play { position: absolute; right: 4px; bottom: 4px; width: 18px; height: 18px; border-radius: 50%; background: rgba(10,12,20,.7); color: #fff; display: grid; place-items: center; }
+.fcov .fbadge { position: absolute; left: 6px; bottom: 6px; background: rgba(10,12,20,.74); color: #fff; border-radius: 7px; padding: 2px 6px; display: flex; align-items: center; gap: 4px; font-size: 11px; pointer-events: none; }
+.fcov .pin { position: absolute; right: 6px; top: 6px; background: var(--accent); color: var(--accent-ink); border-radius: 50%; width: 20px; height: 20px; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.rcov { display: grid; width: 26px; height: 26px; flex: none; gap: 1px; border-radius: 5px; overflow: hidden; background: var(--bg); }
+.rcov.n1 { grid-template: 1fr / 1fr; } .rcov.n2 { grid-template: 1fr / 1fr 1fr; }
+.rcov.n3 { grid-template: 1fr 1fr / 1.4fr 1fr; } .rcov.n3 .cc:first-child { grid-row: 1 / 3; }
+.rcov.n4 { grid-template: 1fr 1fr / 1fr 1fr; }
+.lrow { height: 38px; }
+.pickgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; max-height: 56vh; overflow-y: auto; padding: 2px; }
+.pk { aspect-ratio: 1; padding: 0; border-radius: 8px; overflow: hidden; border: 2px solid transparent; background: var(--elev); }
+.pk .cc { width: 100%; height: 100%; }
+.pk.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

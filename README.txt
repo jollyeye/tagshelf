@@ -14,6 +14,12 @@ THE WINDOW
           "Filter" tab: filter THIS folder by tag; tick "Include subfolders" to cover everything below it.
   Press F1 for all keyboard shortcuts. Digits 1-9 toggle your nine most used tags on the selection.
 
+FOLDER PREVIEWS  Folders show the pictures and videos inside them (a mosaic of up to four) with the number of items.
+  Right-click a folder > "Folder preview…" to choose the picture yourself, go back to automatic, or turn the preview off
+  for that folder. Right-click any picture > "Use as folder preview" sets it for the folder it is in.
+  Settings > "Folder previews": Mosaic / One picture / Off. Video previews are still frames that TagShelf makes
+  the first time you see them (kept in the thumbs folder). Only the files directly inside a folder are used.
+
 TAGS FOLLOW YOUR FILES when you rename, move or copy them inside TagShelf. If you move files
 outside TagShelf, open the new folder: TagShelf recognises them (same name, size and date) and
 reconnects the tags. Your files themselves are never modified.

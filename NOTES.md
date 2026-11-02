@@ -29,6 +29,8 @@ index.html loads: common, ui, state, nav, content, side, viewer, dialogs, downlo
 - Download popup (web/downloads.js): grid of all pending downloads with click/Ctrl/Shift/rubber-band selection; /api/downloads/done and /skip accept `IDs` for batch tagging/moving.
 - Windows quirks learned: never start explorer.exe with hideWindow (the window stays invisible); open files with ShellExecute after claimForeground(); a click right after a rubber-band drag must not clear the selection.
 
+- covers.go + web/covers.js: folder previews. Backend: POST /api/covers {Folders} -> up to 4 media files per folder (direct children only, cached by folder mtime), POST /api/folder/cover {Folder, Image} ("" = automatic, "-" = no preview), POST /api/poster (browser uploads a video still; GET /thumb serves it, 204 until it exists). Custom choices live in library.json `covers` and follow in-app moves/renames (Library.relocateCovers). Frontend: IntersectionObserver loads covers only for visible folders; setting `folderPrev` mosaic|single|off.
+
 ## Data
 Windows: %AppData%\TagShelf (library.json, thumbs\, vectors.bin). Recycle Bin via PowerShell SendToRecycleBin.
 

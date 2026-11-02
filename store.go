@@ -94,6 +94,7 @@ type Library struct {
 	Prefs    Prefs               `json:"prefs"`
 	Recent   []string            `json:"recentDirs,omitempty"`
 	Rejected map[string][]string `json:"rejected,omitempty"`
+	Covers   map[string]*Cover   `json:"covers,omitempty"` // folder previews chosen by the user
 }
 
 // ---------- helpers ----------
@@ -498,6 +499,7 @@ func (l *Library) Relocate(pairs []Pair) {
 		vecs.Rekey(idMap, pathMap)
 		l.touch()
 	}
+	l.relocateCovers(pairs)
 	// vectors also exist for untagged files, so follow those too
 	vecs.RelocatePaths(pairs)
 }

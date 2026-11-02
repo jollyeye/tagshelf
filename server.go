@@ -285,6 +285,9 @@ func (s *Server) Handler() http.Handler {
 	}))
 	mux.HandleFunc("POST /api/ai/test", api(func(r *http.Request, _ none) (any, error) { return s.ai.Test(300), nil }))
 	mux.HandleFunc("POST /api/dups", api(s.apiDups))
+	mux.HandleFunc("POST /api/covers", api(s.apiCovers))
+	mux.HandleFunc("POST /api/folder/cover", api(s.apiSetCover))
+	mux.HandleFunc("POST /api/poster", s.handlePoster)
 	mux.HandleFunc("POST /api/ai/similar", api(func(r *http.Request, in struct {
 		Path string
 		N    int
@@ -678,6 +681,17 @@ func (s *Server) handleThumb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f := recFromInfo(p, st)
+	if f.Kind == "video" { // video stills are made by the browser and stored through /api/poster
+		poster := thumbPath(s.dataDir, f)
+		if _, err := os.Stat(poster); err != nil {
+			w.WriteHeader(http.StatusNoContent) // no still yet: the page makes one (204 keeps the browser console quiet)
+			return
+		}
+		w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+		w.Header().Set("Content-Type", "image/jpeg")
+		http.ServeFile(w, r, poster)
+		return
+	}
 	if f.Kind != "image" || !thumbExts[f.Ext] {
 		http.Redirect(w, r, "/file?p="+strings.ReplaceAll(strings.ReplaceAll(r.URL.Query().Get("p"), "%", "%25"), "&", "%26"), http.StatusFound)
 		return

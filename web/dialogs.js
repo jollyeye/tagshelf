@@ -47,6 +47,7 @@ function openSettings() {
       line('Thumbnails', seg([['cover', 'Fill'], ['contain', 'Show whole picture']], S.fit, (v) => look('fit', v))),
       line('Tags under thumbnails', seg([['names', 'Names'], ['dots', 'Dots'], ['none', 'Hidden']], S.tagShow, (v) => { S.tagShow = v; saveSettingsSoon(); renderContent(); })),
       line('Double-click on a picture or video', seg([['system', 'Opens in its app'], ['viewer', 'Opens the viewer']], S.dbl, (v) => look('dbl', v))),
+      line('Folder previews', seg([['mosaic', 'Mosaic'], ['single', 'One picture'], ['off', 'Off']], S.folderPrev, (v) => { S.folderPrev = v; saveSettingsSoon(); resetCovers(); })),
       chk('Show folders first', S.dirsFirst, (v) => { S.dirsFirst = v; saveSettingsSoon(); recompute(); renderContent(); }),
       chk('Ask before deleting', S.confirmDelete, (v) => { S.confirmDelete = v; saveSettingsSoon(); }),
       chk('Show hidden files', S.hidden, (v) => { S.hidden = v; saveSettingsSoon(); NAV.kids.clear(); refresh(); renderTop(); renderNav(); })),

@@ -192,6 +192,11 @@ function tagMinis(e, max) {
 const isCut = (p) => S.clip && S.clip.mode === 'cut' && S.clip.paths.includes(p);
 
 function tileEl(e) {
+  const t = tileEl0(e);
+  if (e.d) coverWatch(t, e);
+  return t;
+}
+function tileEl0(e) {
   return h('div', { class: 'tile' + (e.d ? ' folder' : '') + (S.sel.has(e.p) ? ' sel' : '') + (isCut(e.p) ? ' cut' : ''), dataset: e.d ? { p: e.p, dir: '1' } : { p: e.p }, draggable: true, title: e.p },
     h('div', { class: 'thumb' }, tileMedia(e),
       h('button', { class: 'chk', title: 'Select' }, icon('check', 13)),
@@ -200,6 +205,11 @@ function tileEl(e) {
       h('div', { class: 'tg' }, tagMinis(e))));
 }
 function rowEl(e) {
+  const t = rowEl0(e);
+  if (e.d) coverWatch(t, e);
+  return t;
+}
+function rowEl0(e) {
   return h('div', { class: 'lrow' + (e.d ? ' folder' : '') + (S.sel.has(e.p) ? ' sel' : '') + (isCut(e.p) ? ' cut' : ''), dataset: e.d ? { p: e.p, dir: '1' } : { p: e.p }, draggable: true, title: e.p },
     h('div', { class: 'c1' }, icon(entryIcon(e), 16), h('span', {}, e.n)),
     h('div', { class: 'c2' }, tagMinis(e, 4)),
@@ -433,6 +443,8 @@ function entryMenu(x, y) {
     one ? { label: 'Rename', icon: 'edit', key: 'F2', fn: () => doRename(one) } : { label: 'Batch rename…', icon: 'edit', fn: () => openBatchRename(es) },
     { label: 'Delete', icon: 'trash', key: 'Del', danger: true, fn: () => doTrash(es) },
     '-',
+    one && one.d ? { label: 'Folder preview…', icon: 'image', fn: () => folderPreviewMenu(x, y, one) } : null,
+    one && !one.d && (one.k === 'image' || one.k === 'video') ? { label: 'Use as folder preview', icon: 'image', fn: () => setCover(dirOf(one.p), one.p) } : null,
     one && one.d ? { label: pinned ? 'Unpin from quick access' : 'Pin to quick access', icon: 'pin', fn: () => pinFolder(one.p, !pinned) } : null,
     { label: 'Copy path', icon: 'copy', fn: async () => { toast((await copyText(es.map((e) => e.p).join('\n'))) ? 'Path copied' : 'Could not copy'); } },
   ].filter((x) => x !== null));
