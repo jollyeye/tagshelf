@@ -1,0 +1,26 @@
+[package]
+name = "tagshelf-core"
+version = "3.0.0-alpha.1"
+edition = "2021"
+description = "TagShelf backend: file browsing, tags, thumbnails, suggestions, download watcher (local HTTP API)"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "tagshelf-server"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tiny_http = "0.12"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif"] }
+jpeg-decoder = { version = "0.3", default-features = false }
+sha1_smol = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

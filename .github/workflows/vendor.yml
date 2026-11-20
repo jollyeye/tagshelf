@@ -1,0 +1,37 @@
+name: Vendor core crates
+
+# Downloads the Rust libraries used by rust/core and publishes them on the "rust-vendor" branch,
+# so the code can also be built in places without access to crates.io.
+on:
+  push:
+    branches: [rust]
+    paths: ["rust/core/Cargo.toml", ".github/workflows/vendor.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Vendor
+        working-directory: rust/core
+        run: |
+          cargo generate-lockfile
+          cargo vendor --versioned-dirs vendor > /dev/null
+          du -sh vendor
+      - name: Publish to rust-vendor branch
+        run: |
+          mkdir /tmp/v
+          cp -r rust/core/vendor rust/core/Cargo.lock /tmp/v/
+          cd /tmp/v
+          git init -q
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git checkout -q -b rust-vendor
+          git add -A
+          git commit -qm "Vendored crates for rust/core"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" rust-vendor

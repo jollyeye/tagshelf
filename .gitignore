@@ -7,3 +7,6 @@ library*.json
 # Rust build output
 rust/src-tauri/target/
 rust/src-tauri/gen/
+rust/core/vendor/
+rust/core/target/
+.cargo/
