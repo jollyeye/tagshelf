@@ -43,8 +43,17 @@ extern "system" {
     fn AllowSetForegroundWindow(pid: u32) -> i32;
 }
 
+#[link(name = "ole32")]
+extern "system" {
+    fn CoInitializeEx(reserved: *mut c_void, coinit: u32) -> i32;
+    fn CoUninitialize();
+}
+
 #[link(name = "shell32")]
 extern "system" {
+    fn ILCreateFromPathW(path: *const u16) -> *mut c_void;
+    fn ILFree(pidl: *mut c_void);
+    fn SHOpenFolderAndSelectItems(folder: *const c_void, count: u32, items: *const *const c_void, flags: u32) -> i32;
     fn ShellExecuteW(hwnd: Handle, op: *const u16, file: *const u16, params: *const u16, dir: *const u16, show: i32) -> isize;
     fn SHFileOperationW(op: *mut ShFileOpW) -> i32;
 }
@@ -179,8 +188,35 @@ fn shell_open(path: &str) -> bool {
     r > 32
 }
 
+/// Opens the folder in Explorer with the file selected, through the shell itself (the window comes
+/// to the front, unlike starting explorer.exe, which hands the job to another process).
+fn reveal_in_explorer(path: &str) -> bool {
+    let w = wide(path);
+    std::thread::spawn(move || unsafe {
+        let hr = CoInitializeEx(std::ptr::null_mut(), 0x2); // apartment threaded, as the shell expects
+        AllowSetForegroundWindow(u32::MAX);
+        let pidl = ILCreateFromPathW(w.as_ptr());
+        let ok = if pidl.is_null() {
+            false
+        } else {
+            let r = SHOpenFolderAndSelectItems(pidl, 0, std::ptr::null(), 0);
+            ILFree(pidl);
+            r >= 0
+        };
+        if hr >= 0 {
+            CoUninitialize();
+        }
+        ok
+    })
+    .join()
+    .unwrap_or(false)
+}
+
 pub fn open_path(path: &str, reveal: bool) -> ApiResult<()> {
     let is_dir = std::fs::metadata(path).map(|m| m.is_dir()).unwrap_or(false);
+    if reveal && !is_dir && reveal_in_explorer(path) {
+        return Ok(());
+    }
     // Explorer windows must NOT be started hidden, or they stay invisible
     claim_foreground();
     if reveal && !is_dir {

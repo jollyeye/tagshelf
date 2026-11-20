@@ -206,6 +206,11 @@ impl Server {
                 let items = args.get("Items").and_then(|v| v.as_object()).cloned().unwrap_or_default();
                 Ok(json!({"tags": self.lib.set_exact_tags(&items), "all": self.lib.tag_list()}))
             }
+            ("POST", "/api/tags/under") => {
+                let (tags, files) = self.lib.tags_under(&args.strs("Paths"));
+                let tags: Vec<Value> = tags.into_iter().map(|(name, count)| json!({"name": name, "count": count})).collect();
+                Ok(json!({"tags": tags, "files": files}))
+            }
             ("POST", "/api/rate") => {
                 self.lib.set_rating(&args.strs("Paths"), args.int("Rating"));
                 Ok(ok())

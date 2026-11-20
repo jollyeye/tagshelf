@@ -387,9 +387,13 @@ async function doRename(e) {
 }
 async function doTrash(es) {
   if (!es.length) return;
-  if (S.confirmDelete) {
-    const what = es.length === 1 ? `“${es[0].n}”` : `${es.length} items`;
-    if (!(await confirmBox('Delete', `Move ${what} to the ${trashWord()}?`, 'Delete', true))) return;
+  // folders: warn about the tags of the files inside them (always, even with confirmations off)
+  const dirs = es.filter((e) => e.d).map((e) => e.p);
+  let inside = null;
+  if (dirs.length) { try { inside = await api('/api/tags/under', { Paths: dirs }); } catch (e) { inside = null; } }
+  if (inside && !(inside.tags || []).length) inside = null;
+  if (S.confirmDelete || inside) {
+    if (!(await confirmDelete(es, inside))) return;
   }
   try { await api('/api/trash', { Paths: es.map((e) => e.p) }); } catch (err) { fail(err); return; }
   S.sel = new Set();
@@ -397,6 +401,36 @@ async function doTrash(es) {
   await refresh();
   afterFsDirs([S.path]);
   renderSide();
+}
+
+// The delete question; for folders with tagged files inside it lists those tags and offers to copy them.
+function confirmDelete(es, inside) {
+  return new Promise((resolve) => {
+    let done = false;
+    const what = es.length === 1 ? `“${es[0].n}”` : `${es.length} items`;
+    const body = h('div', { class: 'del-ask' }, h('p', {}, `Move ${what} to the ${trashWord()}?`));
+    if (inside) {
+      const names = inside.tags.map((t) => t.name);
+      const shown = inside.tags.slice(0, 40);
+      const copyBtn = h('button', { class: 'btn small', title: names.join(', '), onclick: () => {
+        S.tagClip = names.slice();
+        copyText(names.join(', '));
+        copyBtn.replaceChildren(icon('check', 14), ' Tags copied');
+        renderSide();
+      } }, icon('copy', 14), ' Copy tags');
+      body.append(...[
+        h('div', { class: 'sh', style: { marginTop: '14px' } },
+          `Tags inside · ${inside.files} tagged file${inside.files === 1 ? '' : 's'}`),
+        h('div', { class: 'chips del-tags' }, shown.map((t) => tagChip(t.name, { count: t.count, title: `${t.count} file${t.count === 1 ? '' : 's'} with “${t.name}”` }))),
+        inside.tags.length > shown.length ? h('p', { class: 'hint' }, `…and ${inside.tags.length - shown.length} more`) : null,
+        h('div', { class: 'row', style: { marginTop: '12px', gap: '10px', alignItems: 'center' } }, copyBtn,
+          h('span', { class: 'hint', style: { margin: 0 } }, 'Then use “Paste tags” on other files.')),
+        h('p', { class: 'hint' }, `The tags come back if you restore it from the ${trashWord()}.`)].filter(Boolean));
+    }
+    const m = modal('Delete', body, [{ label: 'Cancel' }, { label: 'Delete', danger: true, fn: () => { done = true; resolve(true); } }],
+      { onclose: () => { if (!done) resolve(false); } });
+    setTimeout(() => { const b = $('.dlg-f .btn:last-child', m.el); if (b) b.focus(); }, 30);
+  });
 }
 async function newFolderIn(parent) {
   const name = await prompt('New folder', 'Name', 'New folder');

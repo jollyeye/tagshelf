@@ -697,6 +697,25 @@ impl Library {
         self.touch(&mut d);
     }
 
+    /// The tags used by remembered files at or inside the given paths (for the delete warning).
+    pub fn tags_under(&self, paths: &[String]) -> (Vec<(String, i64)>, i64) {
+        let d = self.r();
+        let mut counts: HashMap<String, i64> = HashMap::new();
+        let mut files = 0;
+        for f in d.files.values() {
+            if f.tags.is_empty() || f.missing || !paths.iter().any(|p| under_root(&f.path, p)) {
+                continue;
+            }
+            files += 1;
+            for t in &f.tags {
+                *counts.entry(t.clone()).or_default() += 1;
+            }
+        }
+        let mut out: Vec<(String, i64)> = counts.into_iter().collect();
+        out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| lower(&a.0).cmp(&lower(&b.0))));
+        (out, files)
+    }
+
     pub fn prefs(&self) -> Prefs {
         self.r().prefs.clone()
     }
