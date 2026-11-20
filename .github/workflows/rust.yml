@@ -1,0 +1,33 @@
+name: Rust build
+
+on:
+  push:
+    branches: [rust]
+    paths: ["rust/**", ".github/workflows/rust.yml"]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: rust/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/src-tauri
+      - name: Build
+        run: cargo build --release
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force out/TagShelf | Out-Null
+          Copy-Item target/release/tagshelf.exe out/TagShelf/TagShelf.exe
+          Compress-Archive -Path out/TagShelf -DestinationPath out/TagShelf-rust-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TagShelf-rust-windows-x64
+          path: rust/src-tauri/out/TagShelf-rust-windows-x64.zip
+          retention-days: 30
