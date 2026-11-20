@@ -1,6 +1,6 @@
 [package]
 name = "tagshelf"
-version = "3.0.0-alpha.1"
+version = "3.0.0-alpha.2"
 edition = "2021"
 description = "TagShelf - a file browser where every file can have many tags"
 
@@ -8,7 +8,8 @@ description = "TagShelf - a file browser where every file can have many tags"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
+tagshelf-core = { path = "../core" }
 
 [profile.release]
 opt-level = 3
