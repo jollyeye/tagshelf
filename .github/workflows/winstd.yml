@@ -1,0 +1,31 @@
+name: Windows std for local checks
+
+# Publishes the Windows (GNU) standard library for one exact Rust version on the "rust-winstd" branch,
+# so Windows-only code can be type-checked on machines that can't download it.
+on:
+  workflow_dispatch:
+  push:
+    branches: [rust]
+    paths: [".github/workflows/winstd.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download rust-std
+        run: |
+          curl -fsSL -o rust-std.tar.xz https://static.rust-lang.org/dist/2026-07-09/rust-std-1.97.0-x86_64-pc-windows-gnu.tar.xz
+          ls -la rust-std.tar.xz
+      - name: Publish
+        run: |
+          mkdir /tmp/w && mv rust-std.tar.xz /tmp/w/ && cd /tmp/w
+          git init -q
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git checkout -q -b rust-winstd
+          git add -A
+          git commit -qm "rust-std 1.97.0 x86_64-pc-windows-gnu"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" rust-winstd
