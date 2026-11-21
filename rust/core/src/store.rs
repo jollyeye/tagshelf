@@ -63,26 +63,20 @@ pub struct TagInfo {
     pub tabs: Vec<PageTab>,
 }
 
-/// A tab on a tag page that lists the tags of one category sharing files with the page's tag.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+/// A tab on a tag page that lists tags of one category. Filter: "exclude" = every tag of the
+/// category that shares files with the page, except the listed ones; "only" = exactly the listed tags.
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(default)]
 pub struct PageTab {
     pub id: String,
     pub label: String,
     pub category: String,
-    /// skip files that also carry another tag from the page tag's own category (crossovers)
-    pub crossover: bool,
-    /// minimum number of shared files for a tag to be listed
-    pub min: i64,
-    /// tags hidden from this tab by hand
+    /// "exclude" (default) or "only"
+    pub mode: String,
     #[serde(deserialize_with = "nullable")]
-    pub hidden: Vec<String>,
-}
-
-impl Default for PageTab {
-    fn default() -> Self {
-        PageTab { id: String::new(), label: String::new(), category: String::new(), crossover: true, min: 1, hidden: vec![] }
-    }
+    pub only: Vec<String>,
+    #[serde(alias = "hidden", deserialize_with = "nullable")]
+    pub exclude: Vec<String>,
 }
 
 /// A Shelf category ("Topics", "Characters", ...) with its layout preset.
@@ -659,12 +653,15 @@ impl Library {
         }
         for info in d.tags.values_mut() {
             for tab in info.tabs.iter_mut() {
-                for h in tab.hidden.iter_mut() {
-                    if *h == src {
-                        *h = dst.clone();
+                for list in [&mut tab.only, &mut tab.exclude] {
+                    for h in list.iter_mut() {
+                        if *h == src {
+                            *h = dst.clone();
+                        }
                     }
+                    let mut seen = std::collections::HashSet::new();
+                    list.retain(|x| seen.insert(x.clone()));
                 }
-                tab.hidden.dedup();
             }
         }
         for rej in d.rejected.values_mut() {

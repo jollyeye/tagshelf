@@ -362,29 +362,52 @@ function tabMenu(x, y, P, tab) {
 function tabView(P, tab) {
   const cat = tab.category;
   const shape = cat ? (PRESET_SHAPE[cat.preset] || 'land') : 'land';
-  const pageCat = P.category;
-  const hide = (name) => updateTab(P, tab, { Hidden: [...tab.hidden, name] });
+  const only = tab.mode === 'only';
+  const list = only ? tab.only : tab.exclude;
+  const setList = (l) => updateTab(P, tab, only ? { Only: l } : { Exclude: l });
+  const add = (names) => { const n = names.filter((x) => !list.includes(x)); if (n.length) setList([...list, ...n]); };
+  const known = new Map(tab.pick.map((x) => [x.name.toLowerCase(), x]));
+
+  // which list: everything except… / only…
+  const seg = h('div', { class: 'tmode' },
+    h('button', { class: 'tmb' + (only ? '' : ' on'), onclick: () => only && updateTab(P, tab, { Mode: 'exclude' }) }, 'Show all except…'),
+    h('button', { class: 'tmb' + (only ? ' on' : ''), onclick: () => !only && updateTab(P, tab, { Mode: 'only' }) }, 'Show only…'));
+  const chips = list.map((n) => h('span', { class: 'chip', style: chipStyle(tagColor(n)), dataset: { tag: n } }, h('span', { class: 'chip-t' }, n),
+    h('button', { class: 'chip-x', title: only ? 'Remove from the list' : 'Show it again', onclick: () => setList(list.filter((x) => x !== n)) }, icon('x', 11))));
+  // type a tag of this category (autocomplete)
+  const dl = h('datalist', { id: 'tabpick-' + tab.id }, tab.pick.filter((x) => !list.includes(x.name)).map((x) => h('option', { value: x.name }, x.shared ? `${x.shared} shared` : '')));
+  const inp = h('input', { class: 'txt small tadd', type: 'text', placeholder: only ? `Add ${cat ? cat.name.toLowerCase() : 'tags'}…` : 'Add a tag to leave out…', list: dl.id, spellcheck: 'false' });
+  const commit = () => {
+    const hit = known.get(inp.value.trim().toLowerCase());
+    if (hit) add([hit.name]); else if (inp.value.trim()) toast(`“${inp.value.trim()}” isn't in ${cat ? cat.name : 'this category'}`, { error: true });
+  };
+  inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } e.stopPropagation(); });
+  inp.addEventListener('change', () => { if (known.has(inp.value.trim().toLowerCase())) commit(); });
+  const bar = h('div', { class: 'tbar' }, seg,
+    h('div', { class: 'tlist' }, chips.length ? chips : h('span', { class: 'none' }, only ? 'Nothing listed yet.' : 'Nothing left out.'), inp, dl),
+    h('button', { class: 'ibtn', title: 'Tab options', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tabMenu(r.left, r.bottom + 4, P, tab); } }, icon('more', 16)));
+  // in "only" mode: one-click suggestions from the tags that share files with this page
+  const sugg = only ? tab.pick.filter((x) => x.shared > 0 && !list.includes(x.name)).slice(0, 24) : [];
+  const suggest = sugg.length ? h('div', { class: 'tsugg' }, h('span', { class: 'muted' }, 'Sharing files with this page:'),
+    sugg.map((x) => h('button', { class: 'chip quick off', style: chipStyle(tagColor(x.name)), title: 'Add to the list', onclick: () => add([x.name]) }, h('span', { class: 'chip-t' }, '＋ ' + x.name, h('em', {}, x.shared))))) : null;
+
+  const move = (name, d) => { const l = [...list]; const i = l.indexOf(name), j = i + d; if (i < 0 || j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; setList(l); };
   const cardMenu = (x, y, name) => menu(x, y, [
     { label: 'Open tag page', icon: 'grid', fn: () => openTagPage(name) },
-    { label: 'Hide from this tab', icon: 'x', fn: () => hide(name) },
-  ]);
-  const cross = h('label', { class: 'tchk' + (pageCat ? '' : ' off'), title: pageCat ? '' : `Put “${P.name}” in a category to use this` },
-    h('input', { type: 'checkbox', checked: tab.crossover && !!pageCat, disabled: !pageCat, onchange: (e) => updateTab(P, tab, { Crossover: e.target.checked }) }),
-    h('span', {}, h('b', {}, 'Ignore crossovers'), h('em', {}, pageCat
-      ? `skip files that also have another ${pageCat.name} tag` + (tab.crossover && tab.skipped ? ` · ${tab.skipped} file${tab.skipped === 1 ? '' : 's'} skipped` : '')
-      : `needs “${P.name}” to be in a category`)));
-  const minSel = h('select', { class: 'txt small', onchange: (e) => updateTab(P, tab, { Min: +e.target.value }) },
-    [1, 2, 3, 5, 10, 20].map((n) => h('option', { value: n, selected: n === tab.min }, n === 1 ? 'any number of' : 'at least ' + n)));
-  const bar = h('div', { class: 'tbar' }, cross,
-    h('label', { class: 'tmin' }, 'Show tags in ', minSel, ' shared files'),
-    h('button', { class: 'ibtn', title: 'Tab options', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tabMenu(r.left, r.bottom + 4, P, tab); } }, icon('more', 16)));
-  const hidden = tab.hidden.length ? h('div', { class: 'thidden' }, h('span', { class: 'muted' }, 'Hidden from this tab:'),
-    tab.hidden.map((n) => h('span', { class: 'chip', style: chipStyle(tagColor(n)) }, h('span', { class: 'chip-t' }, n),
-      h('button', { class: 'chip-x', title: 'Show again', onclick: () => updateTab(P, tab, { Hidden: tab.hidden.filter((x) => x !== n) }) }, icon('x', 11))))) : null;
+    '-',
+    only ? { label: 'Remove from this tab', icon: 'x', fn: () => setList(list.filter((z) => z !== name)) } : { label: 'Hide from this tab', icon: 'x', fn: () => add([name]) },
+    only ? { label: 'Move earlier', icon: 'back', disabled: list.indexOf(name) <= 0, fn: () => move(name, -1) } : null,
+    only ? { label: 'Move later', icon: 'forward', disabled: list.indexOf(name) >= list.length - 1, fn: () => move(name, 1) } : null,
+  ].filter(Boolean));
+  const shared = (n) => n ? `${n} shared file${n === 1 ? '' : 's'}` : 'no shared files yet';
   const body = tab.items.length
-    ? h('div', { class: 'sgrid ' + shape }, tab.items.map((t) => cardEl(t, shape, { sub: `${t.shared} shared file${t.shared === 1 ? '' : 's'}`, menu: cardMenu })))
-    : h('p', { class: 'none' }, cat ? `No ${cat.name} tag shares files with “${P.name}”` + (tab.hidden.length || tab.min > 1 || (tab.crossover && tab.skipped) ? ' with these filters.' : ' yet.') : 'This tab\'s category was deleted.');
-  return h('div', { class: 'tview' }, bar, hidden, body, h('p', { class: 'hint' }, 'Right-click a card to hide it from this tab.'));
+    ? h('div', { class: 'sgrid ' + shape }, tab.items.map((t) => cardEl(t, shape, { sub: shared(t.shared), menu: cardMenu })))
+    : h('p', { class: 'none' }, !cat ? 'This tab\'s category was deleted.'
+      : only ? `List the ${cat.name.toLowerCase()} you want to see here.`
+      : `No ${cat.name} tag shares files with “${P.name}”` + (list.length ? ' apart from the ones you left out.' : ' yet.'));
+  return h('div', { class: 'tview' }, bar, suggest, body,
+    h('p', { class: 'hint' }, only ? 'Only the tags in your list appear, in your order. Right-click a card to remove or move it.'
+      : `Every ${cat ? cat.name.toLowerCase() : 'tag'} sharing files with “${P.name}” appears, except the ones listed. Right-click a card to hide it.`));
 }
 
 function tagPageEl(P) {

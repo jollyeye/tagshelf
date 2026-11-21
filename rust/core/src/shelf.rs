@@ -165,40 +165,42 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
     });
     files.sort_by(|a, b| b.a.cmp(&a.a).then_with(|| natural_cmp(&lower(&a.n), &lower(&b.n))));
 
-    // the page's own tabs: tags of a category that share files with this tag
+    // the page's own tabs: tags of a category, filtered by your list
     let tag_cat: HashMap<String, String> = lib.r().tags.iter().map(|(n, i)| (n.clone(), i.category.clone())).collect();
+    let card_json = |t: &str, n: i64| {
+        let card = cards.get(t);
+        json!({"name": t, "shared": n, "color": card.map(|c| c.color.clone()), "count": card.map(|c| c.count), "cover": card.and_then(|c| c.cover.clone())})
+    };
     let tabs: Vec<Value> = info
         .tabs
         .iter()
         .map(|tab| {
-            let mut skipped = 0;
             let mut shared: HashMap<&str, i64> = HashMap::new();
             for f in &files {
-                if tab.crossover && !info.category.is_empty() {
-                    let crossover = f.t.iter().any(|t| *t != tag && tag_cat.get(t).map(|c| *c == info.category).unwrap_or(false));
-                    if crossover {
-                        skipped += 1;
-                        continue;
-                    }
-                }
                 for t in &f.t {
                     if *t != tag && tag_cat.get(t).map(|c| *c == tab.category).unwrap_or(false) {
                         *shared.entry(t.as_str()).or_default() += 1;
                     }
                 }
             }
-            let mut items: Vec<(&str, i64)> = shared.into_iter().filter(|(t, n)| *n >= tab.min.max(1) && !tab.hidden.iter().any(|h| h == t)).collect();
-            items.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| natural_cmp(&lower(a.0), &lower(b.0))));
-            let items: Vec<Value> = items
-                .into_iter()
-                .map(|(t, n)| {
-                    let card = cards.get(t);
-                    json!({"name": t, "shared": n, "color": card.map(|c| c.color.clone()), "count": card.map(|c| c.count), "cover": card.and_then(|c| c.cover.clone())})
-                })
-                .collect();
+            let mut all: Vec<(&str, i64)> = shared.iter().map(|(t, n)| (*t, *n)).collect();
+            all.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| natural_cmp(&lower(a.0), &lower(b.0))));
+            let only = tab.mode == "only";
+            let items: Vec<Value> = if only {
+                // exactly your list, in your order (tags that no longer exist are skipped)
+                tab.only.iter().filter(|t| cards.contains_key(t.as_str())).map(|t| card_json(t, *shared.get(t.as_str()).unwrap_or(&0))).collect()
+            } else {
+                all.iter().filter(|(t, _)| !tab.exclude.iter().any(|x| x == t)).map(|(t, n)| card_json(t, *n)).collect()
+            };
+            // every tag of the category, for picking: sharing ones first
+            let mut pick: Vec<Value> = all.iter().map(|(t, n)| json!({"name": t, "shared": n})).collect();
+            let mut rest: Vec<&String> = tag_cat.iter().filter(|(t, c)| **c == tab.category && !shared.contains_key(t.as_str())).map(|(t, _)| t).collect();
+            rest.sort_by(|a, b| natural_cmp(&lower(a), &lower(b)));
+            pick.extend(rest.into_iter().map(|t| json!({"name": t, "shared": 0})));
             json!({
-                "id": tab.id, "label": tab.label, "crossover": tab.crossover, "min": tab.min, "hidden": tab.hidden,
-                "category": cats.iter().find(|c| c.id == tab.category), "skipped": skipped, "items": items,
+                "id": tab.id, "label": tab.label, "mode": if only { "only" } else { "exclude" },
+                "only": tab.only, "exclude": tab.exclude,
+                "category": cats.iter().find(|c| c.id == tab.category), "items": items, "pick": pick,
             })
         })
         .collect();
@@ -341,7 +343,13 @@ pub fn tab_add(lib: &'static Library, name: &str, cat: &str, label: &str) -> Api
         let Some(c) = cats.iter().find(|c| c.id == cat) else { return bad("no such category") };
         let id = rand_hex(3);
         let label = clean_tag(label);
-        info.tabs.push(crate::store::PageTab { id: id.clone(), label: if label.is_empty() { c.name.clone() } else { label }, category: cat.into(), ..Default::default() });
+        info.tabs.push(crate::store::PageTab {
+            id: id.clone(),
+            label: if label.is_empty() { c.name.clone() } else { label },
+            category: cat.into(),
+            mode: "exclude".into(),
+            ..Default::default()
+        });
         Ok(id)
     })
 }
@@ -357,17 +365,19 @@ pub fn tab_update(lib: &'static Library, a: &Args) -> ApiResult<()> {
             }
             tab.label = l;
         }
-        if let Some(v) = a.opt_bool("Crossover") {
-            tab.crossover = v;
+        let mode = a.str("Mode");
+        if mode == "only" || mode == "exclude" {
+            tab.mode = mode;
         }
-        if a.has("Min") {
-            tab.min = a.int("Min").clamp(1, 1000);
+        let clean_list = |v: Vec<String>| {
+            let mut seen = std::collections::HashSet::new();
+            v.into_iter().map(|t| clean_tag(&t)).filter(|t| !t.is_empty() && seen.insert(lower(t))).collect::<Vec<_>>()
+        };
+        if a.has("Only") {
+            tab.only = clean_list(a.strs("Only"));
         }
-        if a.has("Hidden") {
-            let mut h = a.strs("Hidden");
-            h.sort();
-            h.dedup();
-            tab.hidden = h;
+        if a.has("Exclude") {
+            tab.exclude = clean_list(a.strs("Exclude"));
         }
         Ok(())
     })

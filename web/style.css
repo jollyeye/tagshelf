@@ -474,3 +474,12 @@ select.txt.small { padding: 3px 6px; font-size: 12.5px; height: auto; }
 .tmin { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
 .thidden { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 14px; font-size: 12.5px; }
 .tview .hint { margin-top: 14px; }
+.tmode { display: flex; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 2px; gap: 2px; flex: none; }
+.tmb { border: 0; background: none; color: var(--muted); border-radius: 7px; padding: 6px 12px; font-size: 13px; font-weight: 500; }
+.tmb:hover { color: var(--text); }
+.tmb.on { background: var(--accent); color: var(--accent-ink); }
+.tlist { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1; min-width: 240px; }
+.tadd { width: 210px; }
+.tsugg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 14px; font-size: 12.5px; }
+.tbar { align-items: flex-start; }
+.tbar .ibtn { align-self: center; }
