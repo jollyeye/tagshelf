@@ -4,7 +4,7 @@ name: Vendor core crates
 # so the code can also be built in places without access to crates.io.
 on:
   push:
-    branches: [rust]
+    branches: [main]
     paths: ["rust/core/Cargo.toml", ".github/workflows/vendor.yml"]
   workflow_dispatch:
 

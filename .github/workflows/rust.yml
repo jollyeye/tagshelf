@@ -2,7 +2,7 @@ name: Rust build
 
 on:
   push:
-    branches: [rust]
+    branches: [main]
     paths: ["rust/**", "web/**", ".github/workflows/rust.yml"]
   workflow_dispatch:
 

@@ -5,7 +5,7 @@ name: Windows std for local checks
 on:
   workflow_dispatch:
   push:
-    branches: [rust]
+    branches: [main]
     paths: [".github/workflows/winstd.yml"]
 
 permissions:
