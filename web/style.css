@@ -488,3 +488,15 @@ select.txt.small { padding: 3px 6px; font-size: 12.5px; height: auto; }
 .tsugg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 14px; font-size: 12.5px; }
 .tbar { align-items: flex-start; }
 .tbar .ibtn { align-self: center; }
+
+/* tag page: search, tag filter and order in one bar */
+.pfbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 16px 0 4px; padding: 8px 12px; background: var(--elev); border: 1px solid var(--line); border-radius: 11px; }
+.pfsearch { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.pfsearch .pfq { width: 220px; }
+.pftags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 1; min-width: 200px; }
+.pftags .pft { width: 170px; }
+.pfchip.not { opacity: .9; border-style: dashed; }
+.pfchip.not .chip-t { text-decoration: line-through; text-decoration-thickness: 1px; }
+.pfsort { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 13px; }
+.csort { display: flex; align-items: center; gap: 10px; margin: -2px 0 14px; font-size: 13px; }
+.csort .tmb { display: inline-flex; align-items: center; gap: 4px; }

@@ -2,7 +2,7 @@
 // Shelf: the media-center mode. Tags become pages (every file with that tag, from every folder),
 // grouped into categories whose layout preset decides how their cards and pages look.
 
-const SH = { view: 'home', cat: '', tag: '', tab: 'all', home: null, page: null, hist: [], byPath: new Map(), shown: 0, q: '', seq: 0 };
+const SH = { view: 'home', cat: '', tag: '', tab: 'all', home: null, page: null, hist: [], byPath: new Map(), shown: 0, q: '', seq: 0, pf: { q: '', inc: [], exc: [] } };
 const PRESET_SHAPE = { banner: 'land', profile: 'port', gallery: 'sq', timeline: 'land' };
 const PRESET_NAMES = { banner: 'Banner', profile: 'Profile', gallery: 'Gallery', timeline: 'Timeline' };
 const PAGE_CHUNK = 240;
@@ -65,8 +65,10 @@ async function openTagPage(name, opt = {}) {
   try { r = await api('/api/shelf/tag', { Name: name }); } catch (e) { fail(e); return; }
   if (seq !== SH.seq) return;
   if (opt.push !== false && !(SH.view === 'tag' && SH.tag === r.name)) shelfPush();
+  if (SH.tag !== r.name) SH.pf = { q: '', inc: [], exc: [] }; // the search and tag filter belong to one page
   SH.view = 'tag'; SH.tag = r.name; SH.page = r; SH.tab = opt.tab || (opt.keepTab && SH.tab) || 'all'; SH.shown = PAGE_CHUNK;
   SH.byPath = new Map(r.files.map((f) => [f.p, f]));
+  if (!SH.home) refreshHomeQuiet(); // the left panel's category counts
   if (S.mode !== 'shelf') { S.mode = 'shelf'; saveSettingsSoon(); document.body.classList.add('mode-shelf'); }
   renderNav();
   renderShelf();
@@ -213,7 +215,7 @@ function renderShelf() {
   if (SH.view === 'tag' && SH.page) { title = SH.page.name; body = tagPageEl(SH.page); }
   else if (SH.view === 'cat') { const c = catById(SH.cat); title = c ? c.name : 'Uncategorized'; body = categoryEl(); }
   else body = homeEl();
-  const search = h('input', { class: 'txt ssearch', type: 'search', placeholder: 'Find a tag…', value: SH.q, spellcheck: 'false' });
+  const search = h('input', { class: 'txt ssearch', type: 'search', placeholder: 'Find a tag…', value: SH.q, spellcheck: 'false', dataset: { focus: 'ssearch' } });
   search.addEventListener('input', debounce(() => { SH.q = search.value; const b = $('#shelf .sbody'); const nb = SH.view === 'tag' ? null : (SH.view === 'cat' ? categoryEl() : homeEl()); if (b && nb) b.replaceChildren(nb); }, 150));
   search.addEventListener('keydown', (e) => { if (e.key === 'Escape') { search.value = ''; SH.q = ''; search.dispatchEvent(new Event('input')); } e.stopPropagation(); });
   root.replaceChildren(
@@ -233,6 +235,12 @@ function cardEl(t, shape, opt = {}) {
 }
 
 const matchQ = (t) => !SH.q || t.name.toLowerCase().includes(SH.q.toLowerCase());
+function sortCards(list) {
+  const dir = S.catDesc ? -1 : 1;
+  const val = { recent: (t) => t.last || 0, count: (t) => t.count || 0 }[S.catSort];
+  // equal values are always listed A to Z
+  return list.slice().sort((a, b) => (val ? (val(a) - val(b)) * dir : collator.compare(a.name, b.name) * dir) || collator.compare(a.name, b.name));
+}
 
 function homeEl() {
   const H = SH.home;
@@ -276,7 +284,11 @@ function categoryEl() {
   const c = catById(SH.cat);
   const tags = (c ? (H.categories.find((x) => x.id === c.id) || {}).tags : H.uncategorized) || [];
   const shape = c ? shapeOfCat(c.id) : 'land';
-  const shown = tags.filter(matchQ);
+  const shown = sortCards(tags.filter(matchQ));
+  const sortBtn = (v, l) => h('button', { class: 'tmb' + (S.catSort === v ? ' on' : ''), onclick: () => { if (S.catSort === v) S.catDesc = !S.catDesc; else { S.catSort = v; S.catDesc = v !== 'name'; } saveSettingsSoon(); redrawPage(); } },
+    l, S.catSort === v ? icon(S.catDesc ? 'down' : 'up', 13) : null);
+  const sortBar = tags.length > 1 ? h('div', { class: 'csort' }, h('span', { class: 'muted' }, 'Sort'),
+    h('div', { class: 'tmode' }, sortBtn('name', 'Name'), sortBtn('recent', 'Recently tagged'), sortBtn('count', 'Most files'))) : null;
   return h('div', { class: 'spad' },
     h('div', { class: 'shead' }, h('span', { class: 'cdot', style: { background: c ? c.color : '#9aa5b8' } }), h('h2', {}, c ? c.name : 'Uncategorized'),
       h('em', {}, `${tags.length} tag${tags.length === 1 ? '' : 's'}` + (c ? ` · ${PRESET_NAMES[c.preset] || 'Banner'} layout` : '')),
@@ -284,6 +296,7 @@ function categoryEl() {
         h('button', { class: 'btn small', onclick: () => categoryLayout(c) }, icon('grid', 14), 'Layout'),
         h('button', { class: 'btn small', onclick: () => addTagsToCategory(c) }, icon('plus', 14), 'Add tags'),
         h('button', { class: 'ibtn', title: 'More', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); categoryMenu(r.left, r.bottom + 4, c); } }, icon('more', 16))) : null),
+    sortBar,
     shown.length ? h('div', { class: 'sgrid ' + shape }, shown.map((t) => cardEl(t, shape)))
       : h('p', { class: 'none' }, tags.length ? 'No tag matches.' : (c ? 'No tags here yet. Use “Add tags”, or right-click any tag.' : 'Every tag has a category.')));
 }
@@ -311,7 +324,7 @@ function addTagsToCategory(c) {
 
 // ---------------------------------------------------------------- a tag page
 function pageTabs(P) {
-  const f = P.files;
+  const f = P.files.filter(pfPass);
   const n = (fn) => f.filter(fn).length;
   const tabs = [
     { id: 'all', label: 'All', fn: () => true },
@@ -321,6 +334,70 @@ function pageTabs(P) {
   ].map((t) => ({ ...t, count: n(t.fn) })).filter((t) => !t.hideEmpty || t.count > 0);
   for (const t of P.tabs || []) tabs.push({ id: 't:' + t.id, label: t.label, count: t.items.length, custom: t });
   return tabs;
+}
+
+// ---------------------------------------------------------------- search, tag filter and order for the file tabs
+const PAGE_SORTS = [['added', 'Date added'], ['name', 'Name'], ['mtime', 'Date modified'], ['size', 'Size']];
+const pfActive = () => !!(SH.pf.q || SH.pf.inc.length || SH.pf.exc.length);
+function pfPass(x) {
+  const pf = SH.pf, t = x.t || [];
+  if (pf.q) {
+    const q = pf.q.toLowerCase();
+    if (!(x.n.toLowerCase().includes(q) || t.some((y) => y.toLowerCase().includes(q)))) return false;
+  }
+  for (const y of pf.exc) if (t.includes(y)) return false;
+  return pf.inc.every((y) => t.includes(y));
+}
+function sortFiles(list) {
+  const k = S.pageSort, dir = S.pageDesc ? -1 : 1;
+  const val = { added: (x) => x.a || 0, mtime: (x) => x.m || 0, size: (x) => x.s || 0 }[k];
+  // equal values are always listed A to Z
+  return list.slice().sort((a, b) => (val ? (val(a) - val(b)) * dir : collator.compare(a.n, b.n) * dir) || collator.compare(a.n, b.n));
+}
+
+// re-draw the page but keep the cursor in the search box and the scroll position
+function redrawPage() {
+  const act = document.activeElement, key = act && act.dataset && act.dataset.focus;
+  const pos = key ? [act.selectionStart, act.selectionEnd] : null;
+  const body = $('#shelf .sbody'), top = body ? body.scrollTop : 0;
+  SH.shown = PAGE_CHUNK;
+  renderShelf();
+  const nb = $('#shelf .sbody'); if (nb) nb.scrollTop = top;
+  if (key) { const el = $(`#shelf [data-focus="${key}"]`); if (el) { el.focus(); try { el.setSelectionRange(pos[0], pos[1]); } catch (e) { /* not a text box */ } } }
+}
+
+function pageFilterBar(P) {
+  const pf = SH.pf;
+  const search = h('input', { class: 'txt small pfq', type: 'search', placeholder: 'Search these files…', value: pf.q, spellcheck: 'false', dataset: { focus: 'pfq' } });
+  search.addEventListener('input', debounce(() => { pf.q = search.value.trim(); redrawPage(); }, 180));
+  search.addEventListener('keydown', (e) => { if (e.key === 'Escape' && search.value) { search.value = ''; pf.q = ''; redrawPage(); } e.stopPropagation(); });
+  // tags that occur on this page's files (with counts), for the tag filter
+  const counts = new Map();
+  for (const f of P.files) for (const t of f.t || []) if (t !== P.name) counts.set(t, (counts.get(t) || 0) + 1);
+  const used = new Set([...pf.inc, ...pf.exc]);
+  const dl = h('datalist', { id: 'pftags' }, [...counts.entries()].filter(([t]) => !used.has(t)).sort((a, b) => b[1] - a[1]).map(([t, n]) => h('option', { value: t }, `${n} file${n === 1 ? '' : 's'}`)));
+  const tagIn = h('input', { class: 'txt small pft', type: 'text', placeholder: '+ Filter by tag…', list: 'pftags', spellcheck: 'false', dataset: { focus: 'pft' } });
+  const addTag = () => {
+    const v = tagIn.value.trim().toLowerCase();
+    const hit = [...counts.keys()].find((t) => t.toLowerCase() === v);
+    if (hit) { if (!pf.inc.includes(hit) && !pf.exc.includes(hit)) pf.inc.push(hit); tagIn.value = ''; redrawPage(); }
+    else if (v) toast(`No file here has the tag “${tagIn.value.trim()}”`, { error: true });
+  };
+  tagIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } e.stopPropagation(); });
+  tagIn.addEventListener('change', () => { if (counts.has([...counts.keys()].find((t) => t.toLowerCase() === tagIn.value.trim().toLowerCase()))) addTag(); });
+  const chip = (t, not) => h('span', { class: 'chip pfchip' + (not ? ' not' : ''), style: chipStyle(tagColor(t)), dataset: { tag: t } },
+    h('span', { class: 'chip-t', title: not ? 'Showing files WITHOUT this tag - click to require it instead' : 'Showing only files WITH this tag - click to exclude it instead',
+      onclick: () => { if (not) { pf.exc = pf.exc.filter((y) => y !== t); pf.inc.push(t); } else { pf.inc = pf.inc.filter((y) => y !== t); pf.exc.push(t); } redrawPage(); } }, (not ? '− ' : '+ ') + t),
+    h('button', { class: 'chip-x', title: 'Remove from the filter', onclick: () => { pf.inc = pf.inc.filter((y) => y !== t); pf.exc = pf.exc.filter((y) => y !== t); redrawPage(); } }, icon('x', 11)));
+  const sortSel = h('select', { class: 'txt small', title: 'Order', onchange: (e) => { S.pageSort = e.target.value; saveSettingsSoon(); redrawPage(); } },
+    PAGE_SORTS.map(([v, l]) => h('option', { value: v, selected: v === S.pageSort }, l)));
+  const dirBtn = h('button', { class: 'ibtn', title: S.pageDesc ? 'Descending (newest / Z / biggest first) - click to reverse' : 'Ascending - click to reverse',
+    onclick: () => { S.pageDesc = !S.pageDesc; saveSettingsSoon(); redrawPage(); } }, icon(S.pageDesc ? 'down' : 'up', 16));
+  return h('div', { class: 'pfbar' },
+    h('div', { class: 'pfsearch' }, icon('search', 15), search),
+    h('div', { class: 'pftags' }, pf.inc.map((t) => chip(t, false)), pf.exc.map((t) => chip(t, true)), tagIn, dl),
+    pfActive() ? h('button', { class: 'btn small', onclick: () => { SH.pf = { q: '', inc: [], exc: [] }; redrawPage(); } }, 'Clear') : null,
+    h('div', { class: 'pfsort' }, h('span', { class: 'muted' }, 'Order'), sortSel, dirBtn));
 }
 
 // ---------------------------------------------------------------- your own tabs (a category's tags that share files)
@@ -416,7 +493,7 @@ function tagPageEl(P) {
   const tabs = pageTabs(P);
   if (!tabs.find((t) => t.id === SH.tab)) SH.tab = 'all';
   const tab = tabs.find((t) => t.id === SH.tab);
-  const list = tab.custom ? P.files : P.files.filter(tab.fn);
+  const list = tab.custom ? P.files : sortFiles(P.files.filter(tab.fn).filter(pfPass));
   const pics = P.files.filter((x) => x.k === 'image').length, vids = P.files.filter((x) => x.k === 'video').length;
   const stats = [`${P.files.length} file${P.files.length === 1 ? '' : 's'}`, pics ? `${pics} picture${pics === 1 ? '' : 's'}` : null, vids ? `${vids} video${vids === 1 ? '' : 's'}` : null,
     (() => { const n = new Set(P.files.map((x) => dirOf(x.p))).size; return n > 1 ? `in ${n} folders` : null; })()].filter(Boolean).join(' · ');
@@ -442,8 +519,10 @@ function tagPageEl(P) {
     oncontextmenu: t.custom ? (e) => { e.preventDefault(); tabMenu(e.clientX, e.clientY, P, t.custom); } : null },
     t.custom && t.custom.category ? h('span', { class: 'cdot', style: { background: t.custom.category.color } }) : null, t.label, h('em', {}, t.count))),
     h('button', { class: 'ptab add', title: 'Add a tab that lists the tags of a category', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); addTabMenu(r.left, r.bottom + 4, P); } }, icon('plus', 14), 'Add tab'));
-  const content = tab.custom ? tabView(P, tab.custom) : h('div', {}, h('div', { class: 'shead' }, h('h3', {}, tab.label), h('em', {}, `${list.length} file${list.length === 1 ? '' : 's'} · ${preset === 'timeline' ? 'by month' : 'newest first'}`)),
-    filesGrid(list, preset === 'timeline'));
+  const byMonth = preset === 'timeline' && S.pageSort === 'added';
+  const content = tab.custom ? tabView(P, tab.custom) : h('div', {}, pageFilterBar(P),
+    h('div', { class: 'shead' }, h('h3', {}, tab.label), h('em', {}, `${list.length} file${list.length === 1 ? '' : 's'}` + (pfActive() ? ' match' : '') + (byMonth ? ' · by month' : ''))),
+    filesGrid(list, byMonth));
   return h('div', { class: 'tagpage preset-' + preset }, hero, tabBar, h('div', { class: 'spad' }, content));
 }
 

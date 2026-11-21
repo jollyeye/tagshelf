@@ -27,6 +27,8 @@ pub struct TagCard {
     pub cover: Option<Pic>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub chosen: bool,
+    /// when a file last got this tag (unix seconds)
+    pub last: i64,
 }
 
 fn pic_of(path: &str, mtime: i64) -> Pic {
@@ -38,6 +40,7 @@ fn pic_of(path: &str, mtime: i64) -> Pic {
 fn cards(d: &LibData) -> HashMap<String, TagCard> {
     let mut best: HashMap<&str, (i64, i64, &str, i64)> = HashMap::new(); // tag -> (rank, added, path, mtime)
     let mut counts: HashMap<&str, i64> = HashMap::new();
+    let mut last: HashMap<&str, i64> = HashMap::new();
     for f in d.files.values() {
         if f.missing || f.isdir {
             continue;
@@ -49,6 +52,8 @@ fn cards(d: &LibData) -> HashMap<String, TagCard> {
         };
         for t in &f.tags {
             *counts.entry(t.as_str()).or_default() += 1;
+            let l = last.entry(t.as_str()).or_default();
+            *l = (*l).max(f.added);
             if rank == 0 {
                 continue;
             }
@@ -60,7 +65,7 @@ fn cards(d: &LibData) -> HashMap<String, TagCard> {
     }
     let mut out = HashMap::new();
     for (name, info) in &d.tags {
-        let mut card = TagCard { name: name.clone(), color: info.color.clone(), count: *counts.get(name.as_str()).unwrap_or(&0), cover: None, chosen: false };
+        let mut card = TagCard { name: name.clone(), color: info.color.clone(), count: *counts.get(name.as_str()).unwrap_or(&0), cover: None, chosen: false, last: *last.get(name.as_str()).unwrap_or(&0) };
         if !info.cover.is_empty() {
             if let Ok(md) = std::fs::metadata(&info.cover) {
                 card.cover = Some(pic_of(&info.cover, mtime_unix(&md)));
