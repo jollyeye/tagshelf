@@ -206,12 +206,17 @@ input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
 .vrow span { flex: 1; }
 
 /* ---------- viewer ---------- */
-#viewer { position: fixed; inset: 0; z-index: 50; background: rgba(6,8,12,.94); display: flex; flex-direction: column; color: #e7e9ef; }
+#viewer { position: fixed; inset: 0; z-index: 50; background: #08090d; display: flex; flex-direction: column; color: #e7e9ef; }
+/* the viewer is always dark: give everything inside it dark colours, whatever the app theme */
+#viewer { --bg: #0d1016; --panel: #141821; --elev: #1c2029; --elev2: #262b38; --line: #2e3445; --text: #e9ecf3; --muted: #a3acc0; color-scheme: dark; }
+#viewer .chip, #viewer .chip .chip-t { color: var(--text); }
+#viewer .chip .chip-t em, #viewer .sh, #viewer .none { color: var(--muted); }
 #viewer .vtop { display: flex; align-items: center; gap: 10px; padding: 8px 14px; }
 #viewer .vtop .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#viewer .vstage { flex: 1; min-height: 0; display: grid; place-items: center; position: relative; }
-#viewer .vstage img, #viewer .vstage video { max-width: 100%; max-height: 100%; object-fit: contain; }
-#viewer .vstage img.actual { max-width: none; max-height: none; cursor: zoom-out; }
+#viewer .vstage { flex: 1; min-height: 0; display: grid; place-items: center; position: relative; overflow: hidden; }
+/* the picture or video always fits the space between the top bar and the tag bar */
+#viewer .vstage > img, #viewer .vstage > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+#viewer .vstage > img.actual { position: static; width: auto; height: auto; max-width: none; max-height: none; cursor: zoom-out; margin: auto; }
 #viewer .vstage img { cursor: zoom-in; }
 #viewer .vnav { position: absolute; top: 50%; transform: translateY(-50%); width: 46px; height: 64px; background: rgba(255,255,255,.08); border: 0; color: #fff; border-radius: 10px; display: grid; place-items: center; }
 #viewer .vnav:hover { background: rgba(255,255,255,.18); }
@@ -286,7 +291,7 @@ body.resizing { user-select: none; cursor: col-resize; }
 .chip.quick .chip-t em { margin-left: 6px; }
 .sw { appearance: none; -webkit-appearance: none; background: none; cursor: pointer; }
 .sw::-webkit-color-swatch-wrapper { padding: 0; } .sw::-webkit-color-swatch { border: 0; border-radius: 50%; }
-#viewer .vstage.zoomed { display: block; overflow: auto; }
+#viewer .vstage.zoomed { display: flex; overflow: auto; }
 #viewer .vstage .empty { color: #cfd3e0; }
 #nav .sp { flex: 1; min-height: 12px; }
 

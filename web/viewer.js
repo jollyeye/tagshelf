@@ -83,11 +83,11 @@ function renderViewerFoot() {
     return h('span', { class: 'chip quick ' + (on ? 'on' : 'off'), style: chipStyle(tagColor(t)), title: `Press ${i + 1}` },
       h('span', { class: 'chip-t', onclick: () => tagPaths([e.p], on ? [] : [t], on ? [t] : [], on ? 'remove tag' : 'add tag') }, h('kbd', {}, i + 1), t));
   }));
-  foot.replaceChildren(
+  foot.replaceChildren(...[
     h('div', {}, h('div', { class: 'sh' }, 'Tags'), tags.length ? chips : h('p', { class: 'none' }, 'No tags yet.'), input),
     S.ai ? h('div', {}, h('div', { class: 'sh' }, h('span', { class: 'ai-badge' }, icon('sparkle', 13), 'Suggestions')), h('div', { id: 'vsugbox' })) : null,
     h('div', {}, h('div', { class: 'sh' }, 'Quick tags (keys 1–9)'), quick),
-    h('div', {}, h('div', { class: 'sh' }, 'Rating'), starsRow([e.p], cur.r || 0, renderViewerFoot)));
+    h('div', {}, h('div', { class: 'sh' }, 'Rating'), starsRow([e.p], cur.r || 0, renderViewerFoot))].filter(Boolean));
   if (S.ai) renderSuggestions($('#vsugbox'), [e.p]);
   if (V.refocus) { V.refocus = false; const i = $('.tag-in', foot); if (i) i.focus(); }
 }
