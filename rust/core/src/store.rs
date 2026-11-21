@@ -58,6 +58,31 @@ pub struct TagInfo {
     /// picture chosen for the tag's card and page banner ("" = automatic)
     #[serde(skip_serializing_if = "String::is_empty")]
     pub cover: String,
+    /// extra tabs on this tag's Shelf page
+    #[serde(skip_serializing_if = "Vec::is_empty", deserialize_with = "nullable")]
+    pub tabs: Vec<PageTab>,
+}
+
+/// A tab on a tag page that lists the tags of one category sharing files with the page's tag.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct PageTab {
+    pub id: String,
+    pub label: String,
+    pub category: String,
+    /// skip files that also carry another tag from the page tag's own category (crossovers)
+    pub crossover: bool,
+    /// minimum number of shared files for a tag to be listed
+    pub min: i64,
+    /// tags hidden from this tab by hand
+    #[serde(deserialize_with = "nullable")]
+    pub hidden: Vec<String>,
+}
+
+impl Default for PageTab {
+    fn default() -> Self {
+        PageTab { id: String::new(), label: String::new(), category: String::new(), crossover: true, min: 1, hidden: vec![] }
+    }
 }
 
 /// A Shelf category ("Topics", "Characters", ...) with its layout preset.
@@ -632,6 +657,16 @@ impl Library {
             sort_tags(&mut nt);
             f.tags = nt;
         }
+        for info in d.tags.values_mut() {
+            for tab in info.tabs.iter_mut() {
+                for h in tab.hidden.iter_mut() {
+                    if *h == src {
+                        *h = dst.clone();
+                    }
+                }
+                tab.hidden.dedup();
+            }
+        }
         for rej in d.rejected.values_mut() {
             for t in rej.iter_mut() {
                 if *t == src {
@@ -652,6 +687,9 @@ impl Library {
             }
             if t.cover.is_empty() {
                 t.cover = old.cover;
+            }
+            if t.tabs.is_empty() {
+                t.tabs = old.tabs;
             }
         }
         self.touch(&mut d);

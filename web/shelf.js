@@ -25,7 +25,7 @@ async function setMode(m, opt = {}) {
   if (m === 'shelf') {
     closeMenu();
     renderNav();
-    if (opt.tag) await openTagPage(opt.tag, { push: changed || SH.view !== 'tag' });
+    if (opt.tag) { await openTagPage(opt.tag, { push: changed || SH.view !== 'tag' }); refreshHomeQuiet(); }
     else await shelfLoad(SH.view === 'home' || !SH.home);
   } else {
     renderNav();
@@ -73,11 +73,16 @@ async function openTagPage(name, opt = {}) {
   $('#shelf .sbody').scrollTop = 0;
 }
 
+// the home data also feeds the counts in the left panel: keep it fresh while a tag page is open
+async function refreshHomeQuiet() {
+  try { const r = await api('/api/shelf/home'); SH.home = r; S.categories = r.categories.map(({ id, name, color, preset }) => ({ id, name, color, preset })); renderNav(); } catch (e) { /* next time */ }
+}
+
 // refresh what is on screen (after tags changed somewhere)
 async function shelfRefresh() {
   if (S.mode !== 'shelf') { SH.home = null; return; }
   const top = ($('#shelf .sbody') || {}).scrollTop || 0;
-  if (SH.view === 'tag') await openTagPage(SH.tag, { push: false, keepTab: true }); else await shelfLoad(true);
+  if (SH.view === 'tag') { await openTagPage(SH.tag, { push: false, keepTab: true }); refreshHomeQuiet(); } else await shelfLoad(true);
   const b = $('#shelf .sbody'); if (b) b.scrollTop = top;
 }
 const shelfRefreshSoon = debounce(shelfRefresh, 400);
@@ -219,11 +224,12 @@ function renderShelf() {
     h('div', { class: 'sbody', tabindex: '-1' }, body));
 }
 
-function cardEl(t, shape) {
+function cardEl(t, shape, opt = {}) {
   const pic = t.cover ? coverCell(t.cover, false) : h('div', { class: 'cc' }, h('div', { class: 'cc-ico' }, icon('tag', 28)));
-  return h('div', { class: 'scard ' + shape, title: `${t.name} · ${t.count} file${t.count === 1 ? '' : 's'}`, dataset: { tag: t.name },
-    onclick: () => openTagPage(t.name), oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); tagMenu(e.clientX, e.clientY, t.name); } },
-    pic, h('div', { class: 'slbl' }, h('b', {}, t.name), h('span', {}, `${t.count} file${t.count === 1 ? '' : 's'}`)));
+  const sub = opt.sub || `${t.count} file${t.count === 1 ? '' : 's'}`;
+  return h('div', { class: 'scard ' + shape, title: `${t.name} · ${sub}`, dataset: { tag: t.name },
+    onclick: () => openTagPage(t.name), oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); (opt.menu || tagMenu)(e.clientX, e.clientY, t.name); } },
+    pic, h('div', { class: 'slbl' }, h('b', {}, t.name), h('span', {}, sub)));
 }
 
 const matchQ = (t) => !SH.q || t.name.toLowerCase().includes(SH.q.toLowerCase());
@@ -311,10 +317,74 @@ function pageTabs(P) {
     { id: 'all', label: 'All', fn: () => true },
     { id: 'pics', label: 'Pictures', fn: (x) => x.k === 'image' },
     { id: 'videos', label: 'Videos', fn: (x) => x.k === 'video' },
-    { id: 'fav', label: '★ Favorites', fn: (x) => (x.r || 0) >= 4 },
-    { id: 'other', label: 'Other files', fn: (x) => x.k !== 'image' && x.k !== 'video' },
-  ];
-  return tabs.map((t) => ({ ...t, count: n(t.fn) })).filter((t) => t.id === 'all' || t.count > 0);
+    { id: 'other', label: 'Other files', fn: (x) => x.k !== 'image' && x.k !== 'video', hideEmpty: true },
+  ].map((t) => ({ ...t, count: n(t.fn) })).filter((t) => !t.hideEmpty || t.count > 0);
+  for (const t of P.tabs || []) tabs.push({ id: 't:' + t.id, label: t.label, count: t.items.length, custom: t });
+  return tabs;
+}
+
+// ---------------------------------------------------------------- your own tabs (a category's tags that share files)
+function addTabMenu(x, y, P) {
+  const have = new Set((P.tabs || []).map((t) => t.category && t.category.id));
+  const items = (S.categories || []).map((c) => ({ label: (have.has(c.id) ? '＋ ' : '') + c.name + (c.id === (P.category && P.category.id) ? ' (same category)' : ''), icon: 'grid',
+    fn: () => addTab(P, c.id) }));
+  if (!items.length) items.push({ label: 'No categories yet', disabled: true });
+  items.push('-', { label: 'New category…', icon: 'plus', fn: async () => { const c = await newCategory(); if (c) addTab(P, c.id); } });
+  menu(x, y, items);
+}
+
+async function addTab(P, catId) {
+  try {
+    const r = await api('/api/shelf/tab/add', { Name: P.name, Category: catId });
+    await openTagPage(P.name, { push: false, tab: 't:' + r.id });
+  } catch (e) { fail(e); }
+}
+
+async function updateTab(P, tab, changes) {
+  try { await api('/api/shelf/tab/update', { Name: P.name, ID: tab.id, ...changes }); } catch (e) { fail(e); return; }
+  await openTagPage(P.name, { push: false, keepTab: true });
+}
+
+function tabMenu(x, y, P, tab) {
+  const i = P.tabs.findIndex((t) => t.id === tab.id);
+  menu(x, y, [
+    { label: 'Rename tab…', icon: 'edit', fn: async () => { const n = await prompt('Rename tab', 'Name', tab.label); if (n && n.trim()) updateTab(P, tab, { Label: n }); } },
+    { label: 'Move left', icon: 'back', disabled: i <= 0, fn: async () => { await api('/api/shelf/tab/move', { Name: P.name, ID: tab.id, Dir: -1 }).catch(fail); openTagPage(P.name, { push: false, keepTab: true }); } },
+    { label: 'Move right', icon: 'forward', disabled: i >= P.tabs.length - 1, fn: async () => { await api('/api/shelf/tab/move', { Name: P.name, ID: tab.id, Dir: 1 }).catch(fail); openTagPage(P.name, { push: false, keepTab: true }); } },
+    '-',
+    { label: 'Remove tab', icon: 'trash', danger: true, fn: async () => {
+      try { await api('/api/shelf/tab/delete', { Name: P.name, ID: tab.id }); } catch (e) { fail(e); return; }
+      SH.tab = 'all'; openTagPage(P.name, { push: false, keepTab: true });
+    } },
+  ]);
+}
+
+function tabView(P, tab) {
+  const cat = tab.category;
+  const shape = cat ? (PRESET_SHAPE[cat.preset] || 'land') : 'land';
+  const pageCat = P.category;
+  const hide = (name) => updateTab(P, tab, { Hidden: [...tab.hidden, name] });
+  const cardMenu = (x, y, name) => menu(x, y, [
+    { label: 'Open tag page', icon: 'grid', fn: () => openTagPage(name) },
+    { label: 'Hide from this tab', icon: 'x', fn: () => hide(name) },
+  ]);
+  const cross = h('label', { class: 'tchk' + (pageCat ? '' : ' off'), title: pageCat ? '' : `Put “${P.name}” in a category to use this` },
+    h('input', { type: 'checkbox', checked: tab.crossover && !!pageCat, disabled: !pageCat, onchange: (e) => updateTab(P, tab, { Crossover: e.target.checked }) }),
+    h('span', {}, h('b', {}, 'Ignore crossovers'), h('em', {}, pageCat
+      ? `skip files that also have another ${pageCat.name} tag` + (tab.crossover && tab.skipped ? ` · ${tab.skipped} file${tab.skipped === 1 ? '' : 's'} skipped` : '')
+      : `needs “${P.name}” to be in a category`)));
+  const minSel = h('select', { class: 'txt small', onchange: (e) => updateTab(P, tab, { Min: +e.target.value }) },
+    [1, 2, 3, 5, 10, 20].map((n) => h('option', { value: n, selected: n === tab.min }, n === 1 ? 'any number of' : 'at least ' + n)));
+  const bar = h('div', { class: 'tbar' }, cross,
+    h('label', { class: 'tmin' }, 'Show tags in ', minSel, ' shared files'),
+    h('button', { class: 'ibtn', title: 'Tab options', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tabMenu(r.left, r.bottom + 4, P, tab); } }, icon('more', 16)));
+  const hidden = tab.hidden.length ? h('div', { class: 'thidden' }, h('span', { class: 'muted' }, 'Hidden from this tab:'),
+    tab.hidden.map((n) => h('span', { class: 'chip', style: chipStyle(tagColor(n)) }, h('span', { class: 'chip-t' }, n),
+      h('button', { class: 'chip-x', title: 'Show again', onclick: () => updateTab(P, tab, { Hidden: tab.hidden.filter((x) => x !== n) }) }, icon('x', 11))))) : null;
+  const body = tab.items.length
+    ? h('div', { class: 'sgrid ' + shape }, tab.items.map((t) => cardEl(t, shape, { sub: `${t.shared} shared file${t.shared === 1 ? '' : 's'}`, menu: cardMenu })))
+    : h('p', { class: 'none' }, cat ? `No ${cat.name} tag shares files with “${P.name}”` + (tab.hidden.length || tab.min > 1 || (tab.crossover && tab.skipped) ? ' with these filters.' : ' yet.') : 'This tab\'s category was deleted.');
+  return h('div', { class: 'tview' }, bar, hidden, body, h('p', { class: 'hint' }, 'Right-click a card to hide it from this tab.'));
 }
 
 function tagPageEl(P) {
@@ -323,14 +393,14 @@ function tagPageEl(P) {
   const tabs = pageTabs(P);
   if (!tabs.find((t) => t.id === SH.tab)) SH.tab = 'all';
   const tab = tabs.find((t) => t.id === SH.tab);
-  const list = P.files.filter(tab.fn);
+  const list = tab.custom ? P.files : P.files.filter(tab.fn);
   const pics = P.files.filter((x) => x.k === 'image').length, vids = P.files.filter((x) => x.k === 'video').length;
   const stats = [`${P.files.length} file${P.files.length === 1 ? '' : 's'}`, pics ? `${pics} picture${pics === 1 ? '' : 's'}` : null, vids ? `${vids} video${vids === 1 ? '' : 's'}` : null,
     (() => { const n = new Set(P.files.map((x) => dirOf(x.p))).size; return n > 1 ? `in ${n} folders` : null; })()].filter(Boolean).join(' · ');
   const catChip = h('button', { class: 'catchip', title: 'Change category', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tagMenu(r.left, r.bottom + 4, P.name); } },
     h('span', { class: 'cdot', style: { background: cat ? cat.color : '#9aa5b8' } }), cat ? cat.name : 'No category', icon('down', 12));
   const actions = h('div', { class: 'pacts' },
-    list.some((x) => x.k === 'image' || x.k === 'video') ? h('button', { class: 'btn primary', onclick: () => slideshow(list) }, icon('play', 14), 'Slideshow') : null,
+    P.files.some((x) => x.k === 'image' || x.k === 'video') ? h('button', { class: 'btn primary', onclick: () => slideshow(tab.custom ? P.files : list) }, icon('play', 14), 'Slideshow') : null,
     h('button', { class: 'btn', onclick: () => showTagInFiles(P) }, icon('folder', 14), 'Show in Files'),
     h('button', { class: 'ibtn', title: 'More', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tagPageMenu(r.left, r.bottom + 4, P); } }, icon('more', 16)));
   const coverPic = P.cover ? heroPic(P.cover) : null;
@@ -344,20 +414,14 @@ function tagPageEl(P) {
   } else {
     hero = h('div', { class: 'phero plain' }, h('div', { class: 'pinfo' }, catChip, h('h1', {}, P.name), h('div', { class: 'pstats' }, stats), actions));
   }
-  const tabBar = h('div', { class: 'ptabs' }, tabs.map((t) => h('button', { class: 'ptab' + (t.id === SH.tab ? ' on' : ''), onclick: () => { SH.tab = t.id; SH.shown = PAGE_CHUNK; renderShelf(); } }, t.label, h('em', {}, t.count))));
-  // related tags, grouped by category
-  const related = (P.related || []).filter((g) => g.tags.length).map((g) => {
-    const shape = g.id ? shapeOfCat(g.id) : 'land';
-    return h('div', { class: 'prel' },
-      h('div', { class: 'shead' }, h('span', { class: 'cdot', style: { background: g.color } }), h('h3', {}, g.id ? `${g.name} with ${P.name}` : 'Often tagged together'), h('em', {}, 'from your tags')),
-      h('div', { class: 'srow avs' }, g.tags.map((t) => h('div', { class: 'av' + (shape === 'port' ? ' tall' : ''), title: `${t.shared} shared file${t.shared === 1 ? '' : 's'}`, dataset: { tag: t.name }, onclick: () => openTagPage(t.name),
-        oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); tagMenu(e.clientX, e.clientY, t.name); } },
-        h('div', { class: 'avpic', style: { borderColor: t.color || 'var(--line)' } }, t.cover ? coverCell(t.cover, false) : h('div', { class: 'cc-ico' }, icon('tag', 20))),
-        h('span', { class: 'avn' }, t.name), h('em', {}, t.shared)))));
-  });
-  const grid = h('div', {}, h('div', { class: 'shead' }, h('h3', {}, tab.label), h('em', {}, `${list.length} file${list.length === 1 ? '' : 's'} · ${preset === 'timeline' ? 'by month' : 'newest first'}`)),
+  const tabBar = h('div', { class: 'ptabs' }, tabs.map((t) => h('button', { class: 'ptab' + (t.id === SH.tab ? ' on' : '') + (t.custom ? ' custom' : ''), dataset: { tab: t.id },
+    onclick: () => { SH.tab = t.id; SH.shown = PAGE_CHUNK; renderShelf(); },
+    oncontextmenu: t.custom ? (e) => { e.preventDefault(); tabMenu(e.clientX, e.clientY, P, t.custom); } : null },
+    t.custom && t.custom.category ? h('span', { class: 'cdot', style: { background: t.custom.category.color } }) : null, t.label, h('em', {}, t.count))),
+    h('button', { class: 'ptab add', title: 'Add a tab that lists the tags of a category', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); addTabMenu(r.left, r.bottom + 4, P); } }, icon('plus', 14), 'Add tab'));
+  const content = tab.custom ? tabView(P, tab.custom) : h('div', {}, h('div', { class: 'shead' }, h('h3', {}, tab.label), h('em', {}, `${list.length} file${list.length === 1 ? '' : 's'} · ${preset === 'timeline' ? 'by month' : 'newest first'}`)),
     filesGrid(list, preset === 'timeline'));
-  return h('div', { class: 'tagpage preset-' + preset }, hero, tabBar, h('div', { class: 'spad' }, related, grid));
+  return h('div', { class: 'tagpage preset-' + preset }, hero, tabBar, h('div', { class: 'spad' }, content));
 }
 
 // the banner / poster picture: the full image (a thumbnail would look blurry that big)

@@ -459,3 +459,18 @@ body.mode-shelf #shelf { display: flex; flex-direction: column; grid-column: 2 /
 .pre .sk { height: 64px; border-radius: 6px; background: var(--elev2); margin-bottom: 7px; position: relative; overflow: hidden; }
 .pre .sk i { position: absolute; background: var(--muted); border-radius: 3px; }
 select.txt.small { padding: 3px 6px; font-size: 12.5px; height: auto; }
+
+/* your own tabs on a tag page */
+.ptab.add { color: var(--accent); margin-left: 6px; }
+.ptab.add .ico { margin-right: -2px; }
+.ptab .cdot { width: 8px; height: 8px; }
+.tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 16px 0 12px; padding: 10px 14px; background: var(--elev); border: 1px solid var(--line); border-radius: 11px; }
+.tbar .ibtn { margin-left: auto; }
+.tchk { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; }
+.tchk input { margin-top: 3px; }
+.tchk span { display: flex; flex-direction: column; gap: 1px; }
+.tchk em { font-style: normal; color: var(--muted); font-size: 12px; }
+.tchk.off { opacity: .55; cursor: default; }
+.tmin { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.thidden { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 14px; font-size: 12.5px; }
+.tview .hint { margin-top: 14px; }

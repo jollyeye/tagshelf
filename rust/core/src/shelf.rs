@@ -165,38 +165,49 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
     });
     files.sort_by(|a, b| b.a.cmp(&a.a).then_with(|| natural_cmp(&lower(&a.n), &lower(&b.n))));
 
-    // related tags: the ones that share files with this tag, grouped by their category
-    let mut co: HashMap<&str, i64> = HashMap::new();
-    for f in &files {
-        for t in &f.t {
-            if *t != tag {
-                *co.entry(t.as_str()).or_default() += 1;
+    // the page's own tabs: tags of a category that share files with this tag
+    let tag_cat: HashMap<String, String> = lib.r().tags.iter().map(|(n, i)| (n.clone(), i.category.clone())).collect();
+    let tabs: Vec<Value> = info
+        .tabs
+        .iter()
+        .map(|tab| {
+            let mut skipped = 0;
+            let mut shared: HashMap<&str, i64> = HashMap::new();
+            for f in &files {
+                if tab.crossover && !info.category.is_empty() {
+                    let crossover = f.t.iter().any(|t| *t != tag && tag_cat.get(t).map(|c| *c == info.category).unwrap_or(false));
+                    if crossover {
+                        skipped += 1;
+                        continue;
+                    }
+                }
+                for t in &f.t {
+                    if *t != tag && tag_cat.get(t).map(|c| *c == tab.category).unwrap_or(false) {
+                        *shared.entry(t.as_str()).or_default() += 1;
+                    }
+                }
             }
-        }
-    }
-    let cat_of = |t: &str| lib.r().tags.get(t).map(|i| i.category.clone()).unwrap_or_default();
-    let mut groups: HashMap<String, Vec<Value>> = HashMap::new();
-    let mut co_sorted: Vec<(&str, i64)> = co.into_iter().collect();
-    co_sorted.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| lower(a.0).cmp(&lower(b.0))));
-    for (t, n) in co_sorted {
-        let c = cat_of(t);
-        let c = if cats.iter().any(|x| x.id == c) { c } else { String::new() };
-        let g = groups.entry(c).or_default();
-        if g.len() < 30 {
-            let card = cards.get(t);
-            g.push(json!({"name": t, "shared": n, "color": card.map(|c| c.color.clone()), "cover": card.and_then(|c| c.cover.clone())}));
-        }
-    }
-    let mut related: Vec<Value> = cats.iter().filter_map(|c| groups.remove(&c.id).map(|tags| json!({"id": c.id, "name": c.name, "color": c.color, "tags": tags}))).collect();
-    if let Some(tags) = groups.remove("") {
-        related.push(json!({"id": "", "name": "Other tags", "color": "#9aa5b8", "tags": tags}));
-    }
+            let mut items: Vec<(&str, i64)> = shared.into_iter().filter(|(t, n)| *n >= tab.min.max(1) && !tab.hidden.iter().any(|h| h == t)).collect();
+            items.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| natural_cmp(&lower(a.0), &lower(b.0))));
+            let items: Vec<Value> = items
+                .into_iter()
+                .map(|(t, n)| {
+                    let card = cards.get(t);
+                    json!({"name": t, "shared": n, "color": card.map(|c| c.color.clone()), "count": card.map(|c| c.count), "cover": card.and_then(|c| c.cover.clone())})
+                })
+                .collect();
+            json!({
+                "id": tab.id, "label": tab.label, "crossover": tab.crossover, "min": tab.min, "hidden": tab.hidden,
+                "category": cats.iter().find(|c| c.id == tab.category), "skipped": skipped, "items": items,
+            })
+        })
+        .collect();
     let category = cats.iter().find(|c| c.id == info.category).cloned();
     let me = cards.get(&tag);
     Ok(json!({
         "name": tag, "color": info.color, "category": category,
         "cover": me.and_then(|c| c.cover.clone()), "chosen": me.map(|c| c.chosen).unwrap_or(false),
-        "files": files, "related": related,
+        "files": files, "tabs": tabs,
     }))
 }
 
@@ -261,6 +272,7 @@ pub fn delete_category(lib: &'static Library, id: &str) {
         if t.category == id {
             t.category.clear();
         }
+        t.tabs.retain(|tab| tab.category != id); // tabs that listed this category go too
     }
     lib.touch(&mut d);
 }
@@ -310,4 +322,71 @@ pub fn set_tag_cover(lib: &'static Library, name: &str, image: &str) -> ApiResul
     }
     lib.touch(&mut d);
     Ok(())
+}
+
+// ---------- tabs on a tag page ----------
+
+fn with_tag<R>(lib: &'static Library, name: &str, f: impl FnOnce(&mut crate::store::TagInfo, &[Category]) -> ApiResult<R>) -> ApiResult<R> {
+    let mut d = lib.w();
+    let Some(t) = d.tag_idx.get(&lower(&clean_tag(name))).cloned() else { return bad("no such tag") };
+    let cats = d.categories.clone();
+    let info = d.tags.get_mut(&t).ok_or("no such tag")?;
+    let r = f(info, &cats)?;
+    lib.touch(&mut d);
+    Ok(r)
+}
+
+pub fn tab_add(lib: &'static Library, name: &str, cat: &str, label: &str) -> ApiResult<String> {
+    with_tag(lib, name, |info, cats| {
+        let Some(c) = cats.iter().find(|c| c.id == cat) else { return bad("no such category") };
+        let id = rand_hex(3);
+        let label = clean_tag(label);
+        info.tabs.push(crate::store::PageTab { id: id.clone(), label: if label.is_empty() { c.name.clone() } else { label }, category: cat.into(), ..Default::default() });
+        Ok(id)
+    })
+}
+
+pub fn tab_update(lib: &'static Library, a: &Args) -> ApiResult<()> {
+    let id = a.str("ID");
+    with_tag(lib, &a.str("Name"), |info, _| {
+        let Some(tab) = info.tabs.iter_mut().find(|t| t.id == id) else { return bad("no such tab") };
+        if a.has("Label") {
+            let l = clean_tag(&a.str("Label"));
+            if l.is_empty() {
+                return bad("give the tab a name");
+            }
+            tab.label = l;
+        }
+        if let Some(v) = a.opt_bool("Crossover") {
+            tab.crossover = v;
+        }
+        if a.has("Min") {
+            tab.min = a.int("Min").clamp(1, 1000);
+        }
+        if a.has("Hidden") {
+            let mut h = a.strs("Hidden");
+            h.sort();
+            h.dedup();
+            tab.hidden = h;
+        }
+        Ok(())
+    })
+}
+
+pub fn tab_delete(lib: &'static Library, name: &str, id: &str) -> ApiResult<()> {
+    with_tag(lib, name, |info, _| {
+        info.tabs.retain(|t| t.id != id);
+        Ok(())
+    })
+}
+
+pub fn tab_move(lib: &'static Library, name: &str, id: &str, dir: i64) -> ApiResult<()> {
+    with_tag(lib, name, |info, _| {
+        let Some(i) = info.tabs.iter().position(|t| t.id == id) else { return bad("no such tab") };
+        let j = i as i64 + dir.signum();
+        if j >= 0 && (j as usize) < info.tabs.len() {
+            info.tabs.swap(i, j as usize);
+        }
+        Ok(())
+    })
 }
