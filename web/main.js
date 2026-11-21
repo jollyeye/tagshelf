@@ -52,8 +52,10 @@ function onKey(e) {
     return;
   }
   if (viewerOpen()) { if (!typing && viewerKey(e)) e.preventDefault(); return; }
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.key === '1' || e.key === '2')) { setMode(e.key === '1' ? 'files' : 'shelf'); e.preventDefault(); return; }
   if (e.key === 'F1') { openHelp(); e.preventDefault(); return; }
   if (typing) return;
+  if (S.mode === 'shelf') { if (shelfKey(e)) e.preventDefault(); return; }
   if (contentKey(e)) e.preventDefault();
 }
 
@@ -108,12 +110,13 @@ async function init() {
   const start = await pickStartFolder();
   await go(start, { initial: true });
   if (S.error && start !== S.home && S.home) await go(S.home, { initial: true });
+  if (S.mode === 'shelf') setMode('shelf');
   if (!S.welcomed) openWelcome(); else if (!S.bgAsked) openBackgroundAsk();
 
   // keep in touch with the program, and notice changes made outside of it
   api('/api/ping').catch(() => {});
   setInterval(() => api('/api/ping').catch(() => {}), 3000);
-  setInterval(() => { if (!document.hidden && !isModalOpen() && !viewerOpen() && !S.loading) refresh({ silent: true }); }, 4000);
+  setInterval(() => { if (!document.hidden && !isModalOpen() && !viewerOpen() && !S.loading && S.mode !== 'shelf') refresh({ silent: true }); }, 4000);
   setInterval(async () => {
     try { const n = ((await api('/api/downloads')).items || []).length; if (n !== S.pending) { S.pending = n; renderNav(); } } catch (e) { /* ignore */ }
   }, 3000);

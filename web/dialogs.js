@@ -89,10 +89,14 @@ function openTagManager() {
   const draw = () => {
     const needle = q.value.trim().toLowerCase();
     const tags = S.tags.filter((t) => !needle || t.name.toLowerCase().includes(needle));
-    list.replaceChildren(tags.length ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, ''), h('th', {}, 'Tag'), h('th', {}, 'Files'), h('th', {}, '')),
+    list.replaceChildren(tags.length ? h('table', { class: 'tbl' }, h('tr', {}, h('th', {}, ''), h('th', {}, 'Tag'), h('th', {}, 'Files'), h('th', {}, 'Shelf category'), h('th', {}, '')),
       tags.map((t) => h('tr', {},
         h('td', {}, h('input', { type: 'color', class: 'sw', value: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : '#9aa5b8', title: 'Colour', onchange: async (e) => { try { after(await api('/api/tag/color', { Name: t.name, Color: e.target.value })); } catch (er) { fail(er); } } })),
         h('td', {}, t.name), h('td', { class: 'muted' }, t.count),
+        h('td', {}, h('select', { class: 'txt small', onchange: async (e) => {
+          if (e.target.value === '+') { e.target.value = t.category || ''; await newCategory([t.name]); draw(); return; }
+          try { const r = await api('/api/tag/category', { Name: t.name, Category: e.target.value }); after(r); if (S.mode === 'shelf') shelfRefresh(); } catch (er) { fail(er); }
+        } }, h('option', { value: '' }, '-'), (S.categories || []).map((c) => h('option', { value: c.id, selected: c.id === t.category }, c.name)), h('option', { value: '+' }, 'New category…'))),
         h('td', { style: { textAlign: 'right', whiteSpace: 'nowrap' } },
           h('button', { class: 'btn small', onclick: async () => {
             const nv = await prompt('Rename tag', 'New name', t.name, { help: 'If another tag already has this name, the two are merged.' });

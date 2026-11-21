@@ -52,6 +52,23 @@ pub struct TagInfo {
     pub color: String,
     #[serde(skip_serializing_if = "is_zero")]
     pub used: i64,
+    /// id of the Shelf category this tag belongs to ("" = uncategorized)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub category: String,
+    /// picture chosen for the tag's card and page banner ("" = automatic)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub cover: String,
+}
+
+/// A Shelf category ("Topics", "Characters", ...) with its layout preset.
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[serde(default)]
+pub struct Category {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+    /// banner | profile | gallery | timeline
+    pub preset: String,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -118,6 +135,8 @@ pub struct LibData {
     pub rejected: HashMap<String, Vec<String>>,
     #[serde(skip_serializing_if = "HashMap::is_empty", deserialize_with = "nullable")]
     pub covers: HashMap<String, Cover>,
+    #[serde(skip_serializing_if = "Vec::is_empty", deserialize_with = "nullable")]
+    pub categories: Vec<Category>,
 
     #[serde(skip)]
     pub tag_idx: HashMap<String, String>,
@@ -139,6 +158,8 @@ pub struct TagOut {
     pub color: String,
     pub count: i64,
     pub used: i64,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub category: String,
 }
 
 fn orphan_key(name: &str, size: i64, mtime: i64) -> String {
@@ -180,7 +201,7 @@ impl LibData {
             return c.clone();
         }
         self.tag_idx.insert(key, name.clone());
-        self.tags.insert(name.clone(), TagInfo { color: auto_color(&name), used: 0 });
+        self.tags.insert(name.clone(), TagInfo { color: auto_color(&name), ..Default::default() });
         name
     }
 
@@ -247,7 +268,7 @@ impl Library {
         }
         for t in missing_tags {
             let c = auto_color(&t);
-            d.tags.entry(t).or_insert(TagInfo { color: c, used: 0 });
+            d.tags.entry(t).or_insert(TagInfo { color: c, ..Default::default() });
         }
         // Go stored ids that may differ from the key after a migration; key everything by id.
         let files = std::mem::take(&mut d.files);
@@ -444,6 +465,20 @@ impl Library {
         if crate::covers::relocate_covers(&mut d, pairs) {
             self.touch(&mut d);
         }
+        // pictures chosen for Shelf tag pages follow too
+        let mut cover_moved = false;
+        for t in d.tags.values_mut() {
+            if t.cover.is_empty() {
+                continue;
+            }
+            if let Some(np) = pairs.iter().find_map(|p| map_under(&t.cover, &p.from, &p.to)) {
+                t.cover = np;
+                cover_moved = true;
+            }
+        }
+        if cover_moved {
+            self.touch(&mut d);
+        }
         drop(d);
         // fingerprints also exist for untagged files, so follow those too
         vecs().relocate_paths(pairs);
@@ -607,9 +642,17 @@ impl Library {
         let info = d.tags.remove(&src);
         d.tag_idx.remove(&lower(&src));
         if !merge {
-            let (color, used) = info.map(|i| (i.color, i.used)).unwrap_or((auto_color(&dst), 0));
-            d.tags.insert(dst.clone(), TagInfo { color, used });
+            let info = info.unwrap_or_else(|| TagInfo { color: auto_color(&dst), ..Default::default() });
+            d.tags.insert(dst.clone(), info);
             d.tag_idx.insert(lower(&dst), dst);
+        } else if let (Some(old), Some(t)) = (info, d.tags.get_mut(&dst)) {
+            // merging: keep the target's settings, borrow what it doesn't have yet
+            if t.category.is_empty() {
+                t.category = old.category;
+            }
+            if t.cover.is_empty() {
+                t.cover = old.cover;
+            }
         }
         self.touch(&mut d);
         Ok(())
@@ -737,7 +780,7 @@ impl Library {
         let mut out: Vec<TagOut> = d
             .tags
             .iter()
-            .map(|(n, ti)| TagOut { name: n.clone(), color: ti.color.clone(), count: *counts.get(n.as_str()).unwrap_or(&0), used: ti.used })
+            .map(|(n, ti)| TagOut { name: n.clone(), color: ti.color.clone(), count: *counts.get(n.as_str()).unwrap_or(&0), used: ti.used, category: ti.category.clone() })
             .collect();
         out.sort_by(|a, b| lower(&a.name).cmp(&lower(&b.name)));
         out

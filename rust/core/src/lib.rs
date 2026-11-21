@@ -8,6 +8,7 @@ pub mod fsops;
 pub mod http;
 pub mod platform;
 pub mod server;
+pub mod shelf;
 pub mod store;
 pub mod thumbs;
 pub mod util;

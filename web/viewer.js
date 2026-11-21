@@ -4,8 +4,9 @@
 const V = { open: false, list: [], i: 0, zoom: false, refocus: false };
 const viewerOpen = () => V.open;
 
-function openViewer(path) {
-  const list = S.vis.filter((e) => !e.d && (e.k === 'image' || e.k === 'video' || e.k === 'audio'));
+// `given` lets other views (the Shelf) open their own list of files
+function openViewer(path, given) {
+  const list = (given || S.vis).filter((e) => !e.d && (e.k === 'image' || e.k === 'video' || e.k === 'audio'));
   const i = list.findIndex((e) => e.p === path);
   if (i < 0) return;
   V.list = list; V.i = i; V.open = true; V.zoom = false;
@@ -27,6 +28,7 @@ function closeViewer() {
   const root = $('#viewer');
   $$('video, audio', root).forEach((m) => { m.pause(); m.removeAttribute('src'); m.load(); });
   root.hidden = true; root.replaceChildren();
+  if (S.mode === 'shelf') { shelfRefreshSoon(); return; }
   renderSide();
   scrollToSelected();
 }
@@ -60,7 +62,7 @@ function showCurrent() {
     V.i > 0 ? h('button', { class: 'vnav l', title: 'Previous (←)', onclick: () => stepViewer(-1) }, icon('back', 24)) : null,
     V.i < V.list.length - 1 ? h('button', { class: 'vnav r', title: 'Next (→)', onclick: () => stepViewer(1) }, icon('forward', 24)) : null);
   // keep the file selected in the browser behind
-  S.sel = new Set([e.p]); S.anchor = S.focus = e.p; paintSel(); renderStatus();
+  if (S.mode !== 'shelf') { S.sel = new Set([e.p]); S.anchor = S.focus = e.p; paintSel(); renderStatus(); }
   // warm the neighbours
   for (const d of [1, -1]) { const nb = V.list[V.i + d]; if (nb && nb.k === 'image') new Image().src = fileUrl(nb.p); }
   renderViewerFoot();
@@ -72,7 +74,7 @@ function renderViewerFoot() {
   const foot = $('#vfoot');
   const e = V.list[V.i];
   if (!foot || !e) return;
-  const cur = S.byPath.get(e.p) || e;
+  const cur = S.byPath.get(e.p) || (typeof SH !== 'undefined' && SH.byPath.get(e.p)) || e;
   const tags = cur.t || [];
   const chips = h('div', { class: 'chips' }, tags.map((t) => tagChip(t, { onremove: () => tagPaths([e.p], [], [t], 'remove tag') })));
   const input = tagInput((list) => { V.refocus = true; tagPaths([e.p], list, [], 'add tags'); }, { exclude: () => tags, placeholder: 'Add a tag…' });

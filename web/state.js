@@ -7,13 +7,14 @@ const S = {
   sel: new Set(), anchor: null,
   f: defaultFilter(),
   sort: 'name', desc: false, group: 'none', folderPrev: 'mosaic', dirsFirst: true, view: 'grid', size: 190, fit: 'cover', theme: 'dark',
+  mode: 'files', categories: [],
   dbl: 'system', tagShow: 'names', ai: true, confirmDelete: true, welcomed: false, bgAsked: false, lastPath: '', navw: 270, sidew: 340,
   tags: [], tagMap: {}, pins: [], views: [], prefs: {}, locs: { quick: [], drives: [] }, recent: [], missing: 0,
   os: '', sep: '\\', home: '', downloads: '', autostart: false, vectors: 0,
   clip: null, undo: [], tagClip: [], rightTab: 'tags', pending: 0,
 };
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-const SAVED = ['folderPrev', 'group', 'view', 'size', 'fit', 'theme', 'sort', 'desc', 'dirsFirst', 'dbl', 'tagShow', 'ai', 'confirmDelete', 'hidden', 'welcomed', 'bgAsked', 'lastPath', 'navw', 'sidew', 'rightTab'];
+const SAVED = ['mode', 'folderPrev', 'group', 'view', 'size', 'fit', 'theme', 'sort', 'desc', 'dirsFirst', 'dbl', 'tagShow', 'ai', 'confirmDelete', 'hidden', 'welcomed', 'bgAsked', 'lastPath', 'navw', 'sidew', 'rightTab'];
 const saveSettingsSoon = debounce(() => {
   const o = {}; for (const k of SAVED) o[k] = S[k];
   api('/api/settings', o).catch(() => {});
@@ -30,6 +31,7 @@ async function loadState() {
   const set = st.settings || {};
   for (const k of SAVED) if (set[k] !== undefined) S[k] = set[k];
   setTags(st.tags);
+  S.categories = st.categories || [];
   Object.assign(S, { pins: st.pins || [], views: st.views || [], prefs: st.prefs || {}, recent: st.recent || [], missing: st.missing || 0,
     os: st.os, sep: st.sep, home: st.home || '', downloads: st.downloads || '', autostart: !!st.autostart, vectors: st.vectors || 0, pending: st.pending || 0 });
   applyLook();
@@ -142,6 +144,7 @@ async function undo() {
 // ---------------------------------------------------------------- tags
 function applyTagResult(r) {
   if (r.all) setTags(r.all);
+  if (typeof shelfTagsChanged === 'function') shelfTagsChanged(r.tags);
   for (const [p, tags] of Object.entries(r.tags || {})) {
     const e = S.byPath.get(p);
     if (e) { e.t = tags && tags.length ? tags : undefined; }

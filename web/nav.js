@@ -144,7 +144,16 @@ function renderNav() {
   const nav = $('#nav');
   if (!nav) return;
   const st = nav.scrollTop;
-  const kids = [h('div', { class: 'brand' }, h('span', { class: 'logo' }, icon('tag', 15)), 'TagShelf')];
+  const kids = [h('div', { class: 'brand' }, h('span', { class: 'logo' }, icon('tag', 15)), 'TagShelf'), modeSwitch()];
+  if (S.mode === 'shelf') {
+    kids.push(...shelfNavItems(), h('div', { class: 'sp' }), h('div', { class: 'nsec' }, 'Tools'),
+      h('div', { class: 'nrow', onclick: () => openTagManager() }, icon('tag', 16), 'Manage tags'),
+      h('div', { class: 'nrow', onclick: () => openSettings() }, icon('settings', 16), 'Settings'),
+      h('div', { class: 'nrow', onclick: quitApp }, icon('x', 16), 'Quit TagShelf'));
+    nav.replaceChildren(...kids);
+    nav.scrollTop = st;
+    return;
+  }
   const quick = (S.locs.quick || []).map((p) => ({ name: p.name, path: p.path, icon: placeIcon(p.icon) }));
   const have = new Set(quick.map((q) => q.path.toLowerCase()));
   for (const p of S.pins) if (!have.has(p.toLowerCase())) quick.push({ name: baseName(p), path: p, icon: 'pin', pinned: true });

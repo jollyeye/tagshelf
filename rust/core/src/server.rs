@@ -5,7 +5,7 @@ use crate::http::*;
 use crate::store::{Library, Pair};
 use crate::util::*;
 use crate::watch::Watcher;
-use crate::{covers, dups, fsops, platform, thumbs};
+use crate::{covers, dups, fsops, platform, shelf, thumbs};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
@@ -273,6 +273,30 @@ impl Server {
                 let (items, need) = self.ai.find_similar(&args.str("Path"), n as usize);
                 Ok(json!({"items": items, "need": need}))
             }
+            // Shelf
+            ("GET", "/api/shelf/home") => Ok(shelf::home(self.lib)),
+            ("POST", "/api/shelf/tag") => shelf::tag_page(self.lib, &args.str("Name")),
+            ("GET", "/api/categories") => Ok(json!({"categories": self.lib.r().categories})),
+            ("POST", "/api/category/create") => shelf::create_category(self.lib, &args.str("Name"), &args.str("Color"), &args.str("Preset"))
+                .map(|c| json!({"category": c, "categories": self.lib.r().categories})),
+            ("POST", "/api/category/update") => shelf::update_category(self.lib, &args).map(|_| json!({"categories": self.lib.r().categories})),
+            ("POST", "/api/category/delete") => {
+                shelf::delete_category(self.lib, &args.str("ID"));
+                Ok(json!({"categories": self.lib.r().categories, "all": self.lib.tag_list()}))
+            }
+            ("POST", "/api/category/order") => {
+                shelf::order_categories(self.lib, &args.strs("IDs"));
+                Ok(json!({"categories": self.lib.r().categories}))
+            }
+            ("POST", "/api/tag/category") => {
+                let mut names = args.strs("Names");
+                let one = args.str("Name");
+                if !one.is_empty() {
+                    names.push(one);
+                }
+                shelf::set_tag_category(self.lib, &names, &args.str("Category")).map(|_| json!({"all": self.lib.tag_list()}))
+            }
+            ("POST", "/api/tag/cover") => shelf::set_tag_cover(self.lib, &args.str("Name"), &args.str("Image")).map(|_| ok()),
             ("POST", "/api/dups") => dups::find(self.lib, &args.str("Path"), args.bool("Sub"), args.bool("Hidden")),
             ("POST", "/api/covers") => Ok(covers::covers(self.lib, &args.strs("Folders"))),
             ("POST", "/api/folder/cover") => covers::set(self.lib, &args.str("Folder"), &args.str("Image")).map(|_| ok()),
@@ -300,7 +324,7 @@ impl Server {
             let d = self.lib.r();
             json!({
                 "pins": d.pins, "views": d.views, "settings": d.settings, "prefs": d.prefs,
-                "recent": d.recent, "missing": missing,
+                "recent": d.recent, "missing": missing, "categories": d.categories,
                 "os": if IS_WIN { "windows" } else if cfg!(target_os = "macos") { "darwin" } else { "linux" },
                 "sep": SEP.to_string(), "version": APP_VERSION, "downloads": default_downloads(),
             })

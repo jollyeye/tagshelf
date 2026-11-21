@@ -76,7 +76,7 @@ function confirmBox(title, message, okLabel = 'OK', danger = false) {
 function tagColor(name) { return (S && S.tagMap[name] && S.tagMap[name].color) || '#9aa5b8'; }
 function chipStyle(color) { return { '--c': color }; }
 function tagChip(name, opt = {}) {
-  const c = h('span', { class: 'chip' + (opt.partial ? ' partial' : '') + (opt.cls ? ' ' + opt.cls : ''), style: chipStyle(tagColor(name)), title: opt.title || name },
+  const c = h('span', { class: 'chip' + (opt.partial ? ' partial' : '') + (opt.cls ? ' ' + opt.cls : ''), style: chipStyle(tagColor(name)), title: opt.title || name, dataset: { tag: name } },
     h('span', { class: 'chip-t', onclick: opt.onclick }, name, opt.count ? h('em', {}, opt.count) : null));
   if (opt.onremove) c.append(h('button', { class: 'chip-x', title: 'Remove tag', onclick: (e) => { e.stopPropagation(); opt.onremove(); } }, icon('x', 11)));
   return c;
