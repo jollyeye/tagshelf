@@ -501,20 +501,14 @@ select.txt.small { padding: 3px 6px; font-size: 12.5px; height: auto; }
 .csort { display: flex; align-items: center; gap: 10px; margin: -2px 0 14px; font-size: 13px; }
 .csort .tmb { display: inline-flex; align-items: center; gap: 4px; }
 
-/* chosen icons and banners (icons may be transparent) */
-.cc.alpha { background: none; }
-.cc.alpha img { object-fit: contain; }
-.scard.alpha { background: radial-gradient(120% 90% at 50% 30%, color-mix(in srgb, var(--accent) 14%, var(--elev2)), var(--elev)); }
-.scard.alpha .cc { inset: 10px 10px 48px; }
-.scard.alpha .cc img { filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .35)); }
-.ptitle { display: flex; align-items: center; gap: 14px; }
-.hicon { width: 64px; height: 64px; border-radius: 12px; overflow: hidden; position: relative; flex: none; background: var(--elev); border: 1px solid var(--line); }
-.hicon .cc { position: absolute; inset: 0; }
-.hicon.alpha { background: none; border: 0; overflow: visible; }
-.hicon.alpha img { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .45)); }
+/* chosen icons and banners */
+.cc img { object-fit: cover; }
 .phero.profile .poster.chosen .cc { position: absolute; inset: 0; }
-.phero.profile .poster.alpha { background: none; border: 0; box-shadow: none; overflow: visible; }
-.phero.profile .poster.alpha img { filter: drop-shadow(0 14px 26px rgba(0, 0, 0, .5)); }
+/* banner layout: the icon is a logo - always treated as transparent */
+.hlogo { position: relative; width: 340px; max-width: 60vw; height: 120px; margin-bottom: 6px; }
+.hlogo .cc.logo { position: absolute; inset: 0; background: none; overflow: visible; }
+.hlogo .cc.logo img { width: 100%; height: 100%; object-fit: contain; object-position: left bottom; filter: drop-shadow(0 6px 16px rgba(0, 0, 0, .55)); }
+.phero.plain .hlogo .cc.logo img { filter: drop-shadow(0 4px 10px rgba(0, 0, 0, .35)); }
 .phero.profile.withbanner { position: relative; min-height: 300px; overflow: hidden; background: none; align-items: flex-end; }
 .phero.profile.withbanner .bpic { position: absolute; inset: 0; }
 .phero.profile.withbanner .bpic .cc { position: absolute; inset: 0; background: none; }

@@ -227,23 +227,19 @@ function renderShelf() {
 }
 
 // ---------------------------------------------------------------- chosen icons and banners
-const ALPHA_EXT = new Set(['.png', '.webp', '.gif', '.svg', '.avif']);
-const isAlpha = (c) => !!c && ALPHA_EXT.has(c.x);
-// a picture the user chose, at full quality (thumbnails would lose transparency)
-function chosenPic(c, lazy) {
-  const attrs = { src: fileUrl(c.p), alt: '', decoding: 'async', draggable: 'false' };
-  if (lazy) attrs.loading = 'lazy';
-  const img = h('img', attrs);
-  const cell = h('div', { class: 'cc' + (isAlpha(c) ? ' alpha' : '') }, img);
+// a picture the user chose, at full quality (the icon of a banner page keeps its transparency)
+function chosenPic(c, cls) {
+  const img = h('img', { src: fileUrl(c.p), alt: '', decoding: 'async', draggable: 'false' });
+  const cell = h('div', { class: 'cc' + (cls ? ' ' + cls : '') }, img);
   img.addEventListener('error', () => { cell.className = 'cc'; cell.replaceChildren(...coverCell(c, false).childNodes); });
   return cell;
 }
-// the picture for a tag card: wide cards prefer the banner, poster and square cards the icon
+// the picture for a tag card (normal cards): wide cards prefer the banner, poster and square cards the icon
 function cardPic(t, shape) {
   const chosen = shape === 'land' ? t.banner : t.icon;
-  if (chosen) return { el: shape === 'land' ? coverCell(chosen, false) : chosenPic(chosen, true), alpha: shape !== 'land' && isAlpha(chosen) };
-  if (t.cover) return { el: coverCell(t.cover, false), alpha: false };
-  return { el: h('div', { class: 'cc' }, h('div', { class: 'cc-ico' }, icon('tag', 28))), alpha: false };
+  if (chosen) return { el: coverCell(chosen, false) };
+  if (t.cover) return { el: coverCell(t.cover, false) };
+  return { el: h('div', { class: 'cc' }, h('div', { class: 'cc-ico' }, icon('tag', 28))) };
 }
 
 async function setTagPicture(name, kind, path) {
@@ -278,7 +274,7 @@ function promptTagName(title, help, initial) {
 // Files mode: right-click a picture -> use it as a tag's icon or banner
 async function usePictureForTag(e, kind) {
   const name = await promptTagName(kind === 'icon' ? 'Use as Shelf icon' : 'Use as Shelf banner',
-    kind === 'icon' ? 'Which tag gets this picture as its icon? Transparent PNG / WebP pictures keep their transparency.' : 'Which tag gets this picture as the banner at the top of its page?',
+    kind === 'icon' ? 'Which tag gets this picture as its icon? Profile pages show it as their poster; Banner pages show it as a logo above the name (transparent pictures keep their shape).' : 'Which tag gets this picture as the banner at the top of its page?',
     (e.t && e.t.length === 1) ? e.t[0] : '');
   if (name) setTagPicture(name, kind, e.p);
 }
@@ -286,7 +282,7 @@ async function usePictureForTag(e, kind) {
 function cardEl(t, shape, opt = {}) {
   const pk = cardPic(t, shape), pic = pk.el;
   const sub = opt.sub || `${t.count} file${t.count === 1 ? '' : 's'}`;
-  return h('div', { class: 'scard ' + shape + (pk.alpha ? ' alpha' : ''), title: `${t.name} · ${sub}`, dataset: { tag: t.name },
+  return h('div', { class: 'scard ' + shape, title: `${t.name} · ${sub}`, dataset: { tag: t.name },
     onclick: () => openTagPage(t.name), oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); (opt.menu || tagMenu)(e.clientX, e.clientY, t.name); } },
     pic, h('div', { class: 'slbl' }, h('b', {}, t.name), h('span', {}, sub)));
 }
@@ -561,13 +557,14 @@ function tagPageEl(P) {
     h('button', { class: 'btn', onclick: () => showTagInFiles(P) }, icon('folder', 14), 'Show in Files'),
     h('button', { class: 'ibtn', title: 'More', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tagPageMenu(r.left, r.bottom + 4, P); } }, icon('more', 16)));
   const bannerPic = P.banner ? heroPic(P.banner) : null;
-  const title = h('div', { class: 'ptitle' }, preset !== 'profile' && P.icon ? h('div', { class: 'hicon' + (isAlpha(P.icon) ? ' alpha' : '') }, chosenPic(P.icon)) : null, h('h1', {}, P.name));
-  const info = h('div', { class: 'pinfo' }, catChip, title, h('div', { class: 'pstats' }, stats), actions);
+  // banner layout: your icon (if any) above the name, always shown as a transparent logo
+  const logo = preset === 'banner' && P.icon ? h('div', { class: 'hlogo' }, chosenPic(P.icon, 'logo')) : null;
+  const info = h('div', { class: 'pinfo' }, logo, catChip, h('h1', {}, P.name), h('div', { class: 'pstats' }, stats), actions);
   let hero;
   if (preset === 'profile') {
     // the icon: your picture (transparent ones keep their shape) or, if none, the automatic one
     const poster = P.icon
-      ? h('div', { class: 'poster chosen' + (isAlpha(P.icon) ? ' alpha' : '') }, chosenPic(P.icon))
+      ? h('div', { class: 'poster chosen' }, chosenPic(P.icon))
       : h('div', { class: 'poster' }, P.cover ? heroPic(P.cover) : h('div', { class: 'cc-ico' }, icon('tag', 40)));
     hero = bannerPic
       ? h('div', { class: 'phero profile withbanner' }, h('div', { class: 'bpic' }, bannerPic), h('div', { class: 'bshade' }), poster, info)
