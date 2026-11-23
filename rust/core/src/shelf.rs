@@ -29,6 +29,18 @@ pub struct TagCard {
     pub chosen: bool,
     /// when a file last got this tag (unix seconds)
     pub last: i64,
+    /// pictures chosen by the user for the tag
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<Pic>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub banner: Option<Pic>,
+}
+
+fn chosen_pic(path: &str) -> Option<Pic> {
+    if path.is_empty() {
+        return None;
+    }
+    std::fs::metadata(path).ok().filter(|m| !m.is_dir()).map(|m| pic_of(path, mtime_unix(&m)))
 }
 
 fn pic_of(path: &str, mtime: i64) -> Pic {
@@ -65,7 +77,7 @@ fn cards(d: &LibData) -> HashMap<String, TagCard> {
     }
     let mut out = HashMap::new();
     for (name, info) in &d.tags {
-        let mut card = TagCard { name: name.clone(), color: info.color.clone(), count: *counts.get(name.as_str()).unwrap_or(&0), cover: None, chosen: false, last: *last.get(name.as_str()).unwrap_or(&0) };
+        let mut card = TagCard { name: name.clone(), color: info.color.clone(), count: *counts.get(name.as_str()).unwrap_or(&0), cover: None, chosen: false, last: *last.get(name.as_str()).unwrap_or(&0), icon: chosen_pic(&info.icon), banner: chosen_pic(&info.banner) };
         if !info.cover.is_empty() {
             if let Ok(md) = std::fs::metadata(&info.cover) {
                 card.cover = Some(pic_of(&info.cover, mtime_unix(&md)));
@@ -174,7 +186,8 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
     let tag_cat: HashMap<String, String> = lib.r().tags.iter().map(|(n, i)| (n.clone(), i.category.clone())).collect();
     let card_json = |t: &str, n: i64| {
         let card = cards.get(t);
-        json!({"name": t, "shared": n, "color": card.map(|c| c.color.clone()), "count": card.map(|c| c.count), "cover": card.and_then(|c| c.cover.clone())})
+        json!({"name": t, "shared": n, "color": card.map(|c| c.color.clone()), "count": card.map(|c| c.count), "cover": card.and_then(|c| c.cover.clone()),
+            "icon": card.and_then(|c| c.icon.clone()), "banner": card.and_then(|c| c.banner.clone())})
     };
     let tabs: Vec<Value> = info
         .tabs
@@ -214,6 +227,7 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
     Ok(json!({
         "name": tag, "color": info.color, "category": category,
         "cover": me.and_then(|c| c.cover.clone()), "chosen": me.map(|c| c.chosen).unwrap_or(false),
+        "icon": me.and_then(|c| c.icon.clone()), "banner": me.and_then(|c| c.banner.clone()),
         "files": files, "tabs": tabs,
     }))
 }
@@ -404,4 +418,32 @@ pub fn tab_move(lib: &'static Library, name: &str, id: &str, dir: i64) -> ApiRes
         }
         Ok(())
     })
+}
+
+/// Chooses the tag's icon or banner ("" = back to automatic).
+pub fn set_tag_picture(lib: &'static Library, name: &str, kind: &str, image: &str) -> ApiResult<()> {
+    if kind != "icon" && kind != "banner" {
+        return bad("unknown picture kind");
+    }
+    let img = if image.is_empty() { String::new() } else { clean_abs(image)? };
+    if !img.is_empty() {
+        match std::fs::metadata(&img) {
+            Ok(m) if !m.is_dir() => {}
+            _ => return bad("that picture doesn't exist"),
+        }
+        if kind_of(&lower_ext(&img)) != "image" {
+            return bad("choose a picture");
+        }
+    }
+    let mut d = lib.w();
+    let Some(t) = d.tag_idx.get(&lower(&clean_tag(name))).cloned() else { return bad("no such tag") };
+    if let Some(info) = d.tags.get_mut(&t) {
+        if kind == "icon" {
+            info.icon = img;
+        } else {
+            info.banner = img;
+        }
+    }
+    lib.touch(&mut d);
+    Ok(())
 }

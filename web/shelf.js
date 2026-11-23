@@ -226,10 +226,67 @@ function renderShelf() {
     h('div', { class: 'sbody', tabindex: '-1' }, body));
 }
 
+// ---------------------------------------------------------------- chosen icons and banners
+const ALPHA_EXT = new Set(['.png', '.webp', '.gif', '.svg', '.avif']);
+const isAlpha = (c) => !!c && ALPHA_EXT.has(c.x);
+// a picture the user chose, at full quality (thumbnails would lose transparency)
+function chosenPic(c, lazy) {
+  const attrs = { src: fileUrl(c.p), alt: '', decoding: 'async', draggable: 'false' };
+  if (lazy) attrs.loading = 'lazy';
+  const img = h('img', attrs);
+  const cell = h('div', { class: 'cc' + (isAlpha(c) ? ' alpha' : '') }, img);
+  img.addEventListener('error', () => { cell.className = 'cc'; cell.replaceChildren(...coverCell(c, false).childNodes); });
+  return cell;
+}
+// the picture for a tag card: wide cards prefer the banner, poster and square cards the icon
+function cardPic(t, shape) {
+  const chosen = shape === 'land' ? t.banner : t.icon;
+  if (chosen) return { el: shape === 'land' ? coverCell(chosen, false) : chosenPic(chosen, true), alpha: shape !== 'land' && isAlpha(chosen) };
+  if (t.cover) return { el: coverCell(t.cover, false), alpha: false };
+  return { el: h('div', { class: 'cc' }, h('div', { class: 'cc-ico' }, icon('tag', 28))), alpha: false };
+}
+
+async function setTagPicture(name, kind, path) {
+  try { await api('/api/tag/picture', { Name: name, Kind: kind, Image: path }); } catch (e) { fail(e); return; }
+  toast(path ? (kind === 'icon' ? 'Icon set' : 'Banner set') : (kind === 'icon' ? 'Icon removed' : 'Banner removed'));
+  if (S.mode === 'shelf') shelfRefresh(); else SH.home = null;
+}
+
+// "which tag?" with autocomplete over all tags
+function promptTagName(title, help, initial) {
+  return new Promise((resolve) => {
+    let done = false;
+    const dl = h('datalist', { id: 'tagnames' }, S.tags.map((t) => h('option', { value: t.name })));
+    const inp = h('input', { class: 'txt', type: 'text', value: initial || '', list: 'tagnames', spellcheck: 'false', placeholder: 'Tag name' });
+    const ok = () => {
+      const v = inp.value.trim().toLowerCase();
+      const t = S.tags.find((x) => x.name.toLowerCase() === v);
+      if (!t) { toast(v ? `There is no tag “${inp.value.trim()}”` : 'Type a tag name', { error: true }); return false; }
+      done = true; resolve(t.name);
+    };
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); if (ok() !== false) m.close(); }
+      else if (e.key === 'Escape') { e.preventDefault(); m.close(); }
+      e.stopPropagation();
+    });
+    const m = modal(title, h('div', {}, h('p', { class: 'hint', style: { marginTop: 0 } }, help), inp, dl),
+      [{ label: 'Cancel' }, { label: 'Use', primary: true, fn: ok }], { onclose: () => { if (!done) resolve(null); } });
+    setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  });
+}
+
+// Files mode: right-click a picture -> use it as a tag's icon or banner
+async function usePictureForTag(e, kind) {
+  const name = await promptTagName(kind === 'icon' ? 'Use as Shelf icon' : 'Use as Shelf banner',
+    kind === 'icon' ? 'Which tag gets this picture as its icon? Transparent PNG / WebP pictures keep their transparency.' : 'Which tag gets this picture as the banner at the top of its page?',
+    (e.t && e.t.length === 1) ? e.t[0] : '');
+  if (name) setTagPicture(name, kind, e.p);
+}
+
 function cardEl(t, shape, opt = {}) {
-  const pic = t.cover ? coverCell(t.cover, false) : h('div', { class: 'cc' }, h('div', { class: 'cc-ico' }, icon('tag', 28)));
+  const pk = cardPic(t, shape), pic = pk.el;
   const sub = opt.sub || `${t.count} file${t.count === 1 ? '' : 's'}`;
-  return h('div', { class: 'scard ' + shape, title: `${t.name} · ${sub}`, dataset: { tag: t.name },
+  return h('div', { class: 'scard ' + shape + (pk.alpha ? ' alpha' : ''), title: `${t.name} · ${sub}`, dataset: { tag: t.name },
     onclick: () => openTagPage(t.name), oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); (opt.menu || tagMenu)(e.clientX, e.clientY, t.name); } },
     pic, h('div', { class: 'slbl' }, h('b', {}, t.name), h('span', {}, sub)));
 }
@@ -315,7 +372,7 @@ function addTagsToCategory(c) {
     }) : [h('span', { class: 'none' }, 'No tag to add.')]));
   };
   q.addEventListener('input', draw);
-  q.addEventListener('keydown', (e) => e.stopPropagation());
+  q.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); }); // Esc still closes the dialog
   draw();
   modal(`Add tags to “${c.name}”`, h('div', {}, h('p', { class: 'hint', style: { marginTop: 0 } }, 'Click the tags to add, then “Add”. A tag can be in one category; tags from another category move here.'), q, h('div', { style: { height: '10px' } }), list),
     [{ label: 'Cancel' }, { label: 'Add', primary: true, fn: async () => { if (picked.size) await setTagCategory([...picked], c.id); } }], { wide: true });
@@ -503,16 +560,22 @@ function tagPageEl(P) {
     P.files.some((x) => x.k === 'image' || x.k === 'video') ? h('button', { class: 'btn primary', onclick: () => slideshow(tab.custom ? P.files : list) }, icon('play', 14), 'Slideshow') : null,
     h('button', { class: 'btn', onclick: () => showTagInFiles(P) }, icon('folder', 14), 'Show in Files'),
     h('button', { class: 'ibtn', title: 'More', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tagPageMenu(r.left, r.bottom + 4, P); } }, icon('more', 16)));
-  const coverPic = P.cover ? heroPic(P.cover) : null;
+  const bannerPic = P.banner ? heroPic(P.banner) : null;
+  const title = h('div', { class: 'ptitle' }, preset !== 'profile' && P.icon ? h('div', { class: 'hicon' + (isAlpha(P.icon) ? ' alpha' : '') }, chosenPic(P.icon)) : null, h('h1', {}, P.name));
+  const info = h('div', { class: 'pinfo' }, catChip, title, h('div', { class: 'pstats' }, stats), actions);
   let hero;
   if (preset === 'profile') {
-    hero = h('div', { class: 'phero profile' }, h('div', { class: 'poster' }, coverPic || h('div', { class: 'cc-ico' }, icon('tag', 40))),
-      h('div', { class: 'pinfo' }, catChip, h('h1', {}, P.name), h('div', { class: 'pstats' }, stats), actions));
-  } else if (preset === 'banner' && coverPic) {
-    hero = h('div', { class: 'phero banner' }, h('div', { class: 'bpic' }, coverPic), h('div', { class: 'bshade' }),
-      h('div', { class: 'pinfo' }, catChip, h('h1', {}, P.name), h('div', { class: 'pstats' }, stats), actions));
+    // the icon: your picture (transparent ones keep their shape) or, if none, the automatic one
+    const poster = P.icon
+      ? h('div', { class: 'poster chosen' + (isAlpha(P.icon) ? ' alpha' : '') }, chosenPic(P.icon))
+      : h('div', { class: 'poster' }, P.cover ? heroPic(P.cover) : h('div', { class: 'cc-ico' }, icon('tag', 40)));
+    hero = bannerPic
+      ? h('div', { class: 'phero profile withbanner' }, h('div', { class: 'bpic' }, bannerPic), h('div', { class: 'bshade' }), poster, info)
+      : h('div', { class: 'phero profile' }, poster, info);
+  } else if (preset === 'banner' && (bannerPic || P.cover)) {
+    hero = h('div', { class: 'phero banner' }, h('div', { class: 'bpic' }, bannerPic || heroPic(P.cover)), h('div', { class: 'bshade' }), info);
   } else {
-    hero = h('div', { class: 'phero plain' }, h('div', { class: 'pinfo' }, catChip, h('h1', {}, P.name), h('div', { class: 'pstats' }, stats), actions));
+    hero = h('div', { class: 'phero plain' }, info);
   }
   const tabBar = h('div', { class: 'ptabs' }, tabs.map((t) => h('button', { class: 'ptab' + (t.id === SH.tab ? ' on' : '') + (t.custom ? ' custom' : ''), dataset: { tab: t.id },
     onclick: () => { SH.tab = t.id; SH.shown = PAGE_CHUNK; renderShelf(); },
@@ -573,14 +636,17 @@ function fileMenu(x, y, f) {
     { label: 'Show in Files', icon: 'folder', fn: () => showFileInFiles(f.p) },
     { label: 'Show in Explorer', icon: 'folder', fn: () => api('/api/open', { Path: f.p, Reveal: true }).catch(fail) },
     '-',
-    (f.k === 'image' || f.k === 'video') && SH.page ? { label: `Use as “${SH.page.name}” picture`, icon: 'image', fn: () => setTagCover(SH.page.name, f.p) } : null,
+    f.k === 'image' && SH.page ? { label: `Use as “${SH.page.name}” icon`, icon: 'image', fn: () => setTagPicture(SH.page.name, 'icon', f.p) } : null,
+    f.k === 'image' && SH.page ? { label: `Use as “${SH.page.name}” banner`, icon: 'image', fn: () => setTagPicture(SH.page.name, 'banner', f.p) } : null,
   ].filter(Boolean));
 }
 
 function tagPageMenu(x, y, P) {
   menu(x, y, [
+    P.icon ? { label: 'Remove the icon (automatic again)', icon: 'refresh', fn: () => setTagPicture(P.name, 'icon', '') } : null,
+    P.banner ? { label: 'Remove the banner', icon: 'refresh', fn: () => setTagPicture(P.name, 'banner', '') } : null,
     P.chosen ? { label: 'Automatic picture again', icon: 'refresh', fn: () => setTagCover(P.name, '') } : null,
-    { label: 'Choose picture: right-click a file below', icon: 'image', disabled: true },
+    { label: 'Icon / banner: right-click a picture below, or any picture in Files', icon: 'image', disabled: true },
     '-',
     { label: 'Rename tag…', icon: 'edit', fn: async () => {
       const nv = await prompt('Rename tag', 'New name', P.name, { help: 'If another tag already has this name, the two are merged.' });

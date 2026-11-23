@@ -58,6 +58,12 @@ pub struct TagInfo {
     /// picture chosen for the tag's card and page banner ("" = automatic)
     #[serde(skip_serializing_if = "String::is_empty")]
     pub cover: String,
+    /// icon (poster / avatar) chosen for the tag; may be a transparent picture
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub icon: String,
+    /// banner picture chosen for the top of the tag's page
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub banner: String,
     /// extra tabs on this tag's Shelf page
     #[serde(skip_serializing_if = "Vec::is_empty", deserialize_with = "nullable")]
     pub tabs: Vec<PageTab>,
@@ -487,12 +493,14 @@ impl Library {
         // pictures chosen for Shelf tag pages follow too
         let mut cover_moved = false;
         for t in d.tags.values_mut() {
-            if t.cover.is_empty() {
-                continue;
-            }
-            if let Some(np) = pairs.iter().find_map(|p| map_under(&t.cover, &p.from, &p.to)) {
-                t.cover = np;
-                cover_moved = true;
+            for pic in [&mut t.cover, &mut t.icon, &mut t.banner] {
+                if pic.is_empty() {
+                    continue;
+                }
+                if let Some(np) = pairs.iter().find_map(|p| map_under(pic, &p.from, &p.to)) {
+                    *pic = np;
+                    cover_moved = true;
+                }
             }
         }
         if cover_moved {
@@ -687,6 +695,12 @@ impl Library {
             }
             if t.tabs.is_empty() {
                 t.tabs = old.tabs;
+            }
+            if t.icon.is_empty() {
+                t.icon = old.icon;
+            }
+            if t.banner.is_empty() {
+                t.banner = old.banner;
             }
         }
         self.touch(&mut d);

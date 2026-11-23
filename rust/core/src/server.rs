@@ -300,6 +300,7 @@ impl Server {
             ("POST", "/api/shelf/tab/update") => shelf::tab_update(self.lib, &args).map(|_| ok()),
             ("POST", "/api/shelf/tab/delete") => shelf::tab_delete(self.lib, &args.str("Name"), &args.str("ID")).map(|_| ok()),
             ("POST", "/api/shelf/tab/move") => shelf::tab_move(self.lib, &args.str("Name"), &args.str("ID"), args.int("Dir")).map(|_| ok()),
+            ("POST", "/api/tag/picture") => shelf::set_tag_picture(self.lib, &args.str("Name"), &args.str("Kind"), &args.str("Image")).map(|_| ok()),
             ("POST", "/api/tag/cover") => shelf::set_tag_cover(self.lib, &args.str("Name"), &args.str("Image")).map(|_| ok()),
             ("POST", "/api/dups") => dups::find(self.lib, &args.str("Path"), args.bool("Sub"), args.bool("Hidden")),
             ("POST", "/api/covers") => Ok(covers::covers(self.lib, &args.strs("Folders"))),

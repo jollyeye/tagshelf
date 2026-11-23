@@ -275,6 +275,7 @@ function renderContent() {
     return;
   }
   R.groups = makeGroups(); R.gi = 0; R.ii = 0; R.host = null; R.done = false;
+  R.order = displayOrder(R.groups);
   if (S.view === 'list') c.append(listHead());
   appendChunk();
   if (keep) {
@@ -301,14 +302,24 @@ function scrollToSelected() {
   if (!el && !R.done) { renderAllChunks(); el = $$('#content [data-p]').find((x) => x.dataset.p === p); }
   if (el) el.scrollIntoView({ block: 'nearest' });
 }
+// The files in the order they are shown on screen (grouping can reorder them; a file shown in
+// several groups counts where it first appears). Ranges and arrow keys must follow this order.
+function displayOrder(groups) {
+  const seen = new Set(), out = [];
+  for (const g of groups) for (const e of g.items) if (!seen.has(e.p)) { seen.add(e.p); out.push(e); }
+  return out;
+}
+function shownOrder() { return R.order && R.order.length === S.vis.length ? R.order : displayOrder(makeGroups()); }
+
 function clickEntry(p, ev) {
-  const idx = (x) => S.vis.findIndex((e) => e.p === x);
+  const order = shownOrder();
+  const idx = (x) => order.findIndex((e) => e.p === x);
   if (ev.shiftKey && S.anchor && S.byPath.has(S.anchor)) {
     const a = idx(S.anchor), b = idx(p);
     if (a >= 0 && b >= 0) {
       const [lo, hi] = a < b ? [a, b] : [b, a];
       if (!(ev.ctrlKey || ev.metaKey)) S.sel = new Set();
-      for (let i = lo; i <= hi; i++) S.sel.add(S.vis[i].p);
+      for (let i = lo; i <= hi; i++) S.sel.add(order[i].p);
     }
   } else if (ev.ctrlKey || ev.metaKey) {
     if (S.sel.has(p)) S.sel.delete(p); else S.sel.add(p);
@@ -327,11 +338,12 @@ function gridCols() {
   return Math.max(1, n);
 }
 function moveFocus(delta, extend) {
-  if (!S.vis.length) return;
-  let i = S.vis.findIndex((e) => e.p === S.focus);
-  if (i < 0) i = delta > 0 ? -1 : S.vis.length;
-  const ni = Math.max(0, Math.min(S.vis.length - 1, i + delta));
-  const p = S.vis[ni].p;
+  const order = shownOrder();
+  if (!order.length) return;
+  let i = order.findIndex((e) => e.p === S.focus);
+  if (i < 0) i = delta > 0 ? -1 : order.length;
+  const ni = Math.max(0, Math.min(order.length - 1, i + delta));
+  const p = order[ni].p;
   if (extend) clickEntry(p, { shiftKey: true });
   else { S.sel = new Set([p]); S.anchor = p; S.focus = p; selectionChanged(); }
   scrollToSelected();
@@ -479,6 +491,8 @@ function entryMenu(x, y) {
     '-',
     one && one.d ? { label: 'Folder preview…', icon: 'image', fn: () => folderPreviewMenu(x, y, one) } : null,
     one && !one.d && (one.k === 'image' || one.k === 'video') ? { label: 'Use as folder preview', icon: 'image', fn: () => setCover(dirOf(one.p), one.p) } : null,
+    one && !one.d && one.k === 'image' ? { label: 'Use as Shelf icon…', icon: 'tag', fn: () => usePictureForTag(one, 'icon') } : null,
+    one && !one.d && one.k === 'image' ? { label: 'Use as Shelf banner…', icon: 'tag', fn: () => usePictureForTag(one, 'banner') } : null,
     one && one.d ? { label: pinned ? 'Unpin from quick access' : 'Pin to quick access', icon: 'pin', fn: () => pinFolder(one.p, !pinned) } : null,
     { label: 'Copy path', icon: 'copy', fn: async () => { toast((await copyText(es.map((e) => e.p).join('\n'))) ? 'Path copied' : 'Could not copy'); } },
   ].filter((x) => x !== null));
