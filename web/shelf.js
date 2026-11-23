@@ -6,6 +6,8 @@ const SH = { view: 'home', cat: '', tag: '', tab: 'all', home: null, page: null,
 const PRESET_SHAPE = { banner: 'land', profile: 'port', gallery: 'sq', timeline: 'land' };
 const PRESET_NAMES = { banner: 'Banner', profile: 'Profile', gallery: 'Gallery', timeline: 'Timeline' };
 const PAGE_CHUNK = 240;
+// what scrolls: on a tag page only the files, elsewhere the whole Shelf
+const scrollBox = () => $('#shelf .pscroll') || $('#shelf .sbody');
 
 function catById(id) { return (S.categories || []).find((c) => c.id === id); }
 function shapeOfCat(id) { const c = catById(id); return PRESET_SHAPE[(c && c.preset) || 'banner'] || 'land'; }
@@ -72,7 +74,7 @@ async function openTagPage(name, opt = {}) {
   if (S.mode !== 'shelf') { S.mode = 'shelf'; saveSettingsSoon(); document.body.classList.add('mode-shelf'); }
   renderNav();
   renderShelf();
-  $('#shelf .sbody').scrollTop = 0;
+  const sb = scrollBox(); if (sb) sb.scrollTop = 0;
 }
 
 // the home data also feeds the counts in the left panel: keep it fresh while a tag page is open
@@ -83,9 +85,9 @@ async function refreshHomeQuiet() {
 // refresh what is on screen (after tags changed somewhere)
 async function shelfRefresh() {
   if (S.mode !== 'shelf') { SH.home = null; return; }
-  const top = ($('#shelf .sbody') || {}).scrollTop || 0;
+  const top = (scrollBox() || {}).scrollTop || 0;
   if (SH.view === 'tag') { await openTagPage(SH.tag, { push: false, keepTab: true }); refreshHomeQuiet(); } else await shelfLoad(true);
-  const b = $('#shelf .sbody'); if (b) b.scrollTop = top;
+  const b = scrollBox(); if (b) b.scrollTop = top;
 }
 const shelfRefreshSoon = debounce(shelfRefresh, 400);
 
@@ -223,7 +225,7 @@ function renderShelf() {
       h('button', { class: 'ibtn', title: 'Back (Alt+←)', disabled: !SH.hist.length, onclick: shelfBack }, icon('back', 18)),
       h('b', { class: 'stitle' }, title),
       SH.view !== 'tag' ? search : null),
-    h('div', { class: 'sbody', tabindex: '-1' }, body));
+    h('div', { class: 'sbody' + (SH.view === 'tag' && SH.page ? ' tagview' : ''), tabindex: '-1' }, body));
 }
 
 // ---------------------------------------------------------------- chosen icons and banners
@@ -412,10 +414,10 @@ function sortFiles(list) {
 function redrawPage() {
   const act = document.activeElement, key = act && act.dataset && act.dataset.focus;
   const pos = key ? [act.selectionStart, act.selectionEnd] : null;
-  const body = $('#shelf .sbody'), top = body ? body.scrollTop : 0;
+  const body = scrollBox(), top = body ? body.scrollTop : 0;
   SH.shown = PAGE_CHUNK;
   renderShelf();
-  const nb = $('#shelf .sbody'); if (nb) nb.scrollTop = top;
+  const nb = scrollBox(); if (nb) nb.scrollTop = top;
   if (key) { const el = $(`#shelf [data-focus="${key}"]`); if (el) { el.focus(); try { el.setSelectionRange(pos[0], pos[1]); } catch (e) { /* not a text box */ } } }
 }
 
@@ -450,7 +452,16 @@ function pageFilterBar(P) {
     h('div', { class: 'pfsearch' }, icon('search', 15), search),
     h('div', { class: 'pftags' }, pf.inc.map((t) => chip(t, false)), pf.exc.map((t) => chip(t, true)), tagIn, dl),
     pfActive() ? h('button', { class: 'btn small', onclick: () => { SH.pf = { q: '', inc: [], exc: [] }; redrawPage(); } }, 'Clear') : null,
-    h('div', { class: 'pfsort' }, h('span', { class: 'muted' }, 'Order'), sortSel, dirBtn));
+    h('div', { class: 'pfsort' }, h('span', { class: 'muted' }, 'Order'), sortSel, dirBtn),
+    h('label', { class: 'pfsize', title: 'Tile size (Ctrl + mouse wheel)' }, icon('image', 14),
+      h('input', { class: 'sizer', type: 'range', min: 110, max: 420, step: 10, value: S.shelfSize || 190, oninput: (e) => setShelfSize(+e.target.value) })));
+}
+
+function setShelfSize(v) {
+  S.shelfSize = Math.max(110, Math.min(420, v));
+  applyLook();
+  saveSettingsSoon();
+  const r = $('#shelf .pfsize .sizer'); if (r && +r.value !== S.shelfSize) r.value = S.shelfSize;
 }
 
 // ---------------------------------------------------------------- your own tabs (a category's tags that share files)
@@ -535,9 +546,10 @@ function tabView(P, tab) {
     : h('p', { class: 'none' }, !cat ? 'This tab\'s category was deleted.'
       : only ? `List the ${cat.name.toLowerCase()} you want to see here.`
       : `No ${cat.name} tag shares files with “${P.name}”` + (list.length ? ' apart from the ones you left out.' : ' yet.'));
-  return h('div', { class: 'tview' }, bar, suggest, body,
+  // [the bar that stays in place, the cards that scroll]
+  return [h('div', { class: 'tview' }, bar, suggest), h('div', { class: 'tview' }, body,
     h('p', { class: 'hint' }, only ? 'Only the tags in your list appear, in your order. Right-click a card to remove or move it.'
-      : `Every ${cat ? cat.name.toLowerCase() : 'tag'} sharing files with “${P.name}” appears, except the ones listed. Right-click a card to hide it.`));
+      : `Every ${cat ? cat.name.toLowerCase() : 'tag'} sharing files with “${P.name}” appears, except the ones listed. Right-click a card to hide it.`))];
 }
 
 function tagPageEl(P) {
@@ -580,10 +592,22 @@ function tagPageEl(P) {
     t.custom && t.custom.category ? h('span', { class: 'cdot', style: { background: t.custom.category.color } }) : null, t.label, h('em', {}, t.count))),
     h('button', { class: 'ptab add', title: 'Add a tab that lists the tags of a category', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); addTabMenu(r.left, r.bottom + 4, P); } }, icon('plus', 14), 'Add tab'));
   const byMonth = preset === 'timeline' && S.pageSort === 'added';
-  const content = tab.custom ? tabView(P, tab.custom) : h('div', {}, pageFilterBar(P),
-    h('div', { class: 'shead' }, h('h3', {}, tab.label), h('em', {}, `${list.length} file${list.length === 1 ? '' : 's'}` + (pfActive() ? ' match' : '') + (byMonth ? ' · by month' : ''))),
-    filesGrid(list, byMonth));
-  return h('div', { class: 'tagpage preset-' + preset }, hero, tabBar, h('div', { class: 'spad' }, content));
+  // the banner, the tabs and the bar stay in place; only the files (or cards) scroll
+  let fixed, scrolling;
+  if (tab.custom) [fixed, scrolling] = tabView(P, tab.custom);
+  else {
+    fixed = pageFilterBar(P);
+    scrolling = h('div', {}, h('div', { class: 'shead' }, h('h3', {}, tab.label), h('em', {}, `${list.length} file${list.length === 1 ? '' : 's'}` + (pfActive() ? ' match' : '') + (byMonth ? ' · by month' : ''))),
+      filesGrid(list, byMonth));
+  }
+  const scroller = h('div', { class: 'pscroll', tabindex: '-1' }, h('div', { class: 'spad' }, scrolling));
+  // Ctrl + mouse wheel changes the tile size, like in Files
+  scroller.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey || tab.custom) return;
+    e.preventDefault();
+    setShelfSize((S.shelfSize || 190) + (e.deltaY < 0 ? 20 : -20));
+  }, { passive: false });
+  return h('div', { class: 'tagpage preset-' + preset }, hero, tabBar, h('div', { class: 'pfixed' }, fixed), scroller);
 }
 
 // the banner / poster picture: the full image (a thumbnail would look blurry that big)
@@ -617,7 +641,7 @@ function filesGrid(list, byMonth) {
     }
   } else parts.push(h('div', { class: 'sgrid files' }, shown.map((f) => fileTile(f, list))));
   if (list.length > shown.length) {
-    const more = h('button', { class: 'btn smore', onclick: () => { SH.shown += PAGE_CHUNK * 2; const top = $('#shelf .sbody').scrollTop; renderShelf(); $('#shelf .sbody').scrollTop = top; } }, `Show more (${list.length - shown.length} left)`);
+    const more = h('button', { class: 'btn smore', onclick: () => { SH.shown += PAGE_CHUNK * 2; const top = scrollBox().scrollTop; renderShelf(); scrollBox().scrollTop = top; } }, `Show more (${list.length - shown.length} left)`);
     parts.push(more);
     // load more automatically when the button scrolls into view
     const io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) { io.disconnect(); more.click(); } }, { rootMargin: '600px' });

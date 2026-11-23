@@ -7,14 +7,14 @@ const S = {
   sel: new Set(), anchor: null,
   f: defaultFilter(),
   sort: 'name', desc: false, group: 'none', folderPrev: 'mosaic', dirsFirst: true, view: 'grid', size: 190, fit: 'cover', theme: 'dark',
-  mode: 'files', categories: [], pageSort: 'added', pageDesc: true, catSort: 'count', catDesc: true,
+  mode: 'files', categories: [], shelfSize: 190, pageSort: 'added', pageDesc: true, catSort: 'count', catDesc: true,
   dbl: 'system', tagShow: 'names', ai: true, confirmDelete: true, welcomed: false, bgAsked: false, lastPath: '', navw: 270, sidew: 340,
   tags: [], tagMap: {}, pins: [], views: [], prefs: {}, locs: { quick: [], drives: [] }, recent: [], missing: 0,
   os: '', sep: '\\', home: '', downloads: '', autostart: false, vectors: 0,
   clip: null, undo: [], tagClip: [], rightTab: 'tags', pending: 0,
 };
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-const SAVED = ['mode', 'pageSort', 'pageDesc', 'catSort', 'catDesc', 'folderPrev', 'group', 'view', 'size', 'fit', 'theme', 'sort', 'desc', 'dirsFirst', 'dbl', 'tagShow', 'ai', 'confirmDelete', 'hidden', 'welcomed', 'bgAsked', 'lastPath', 'navw', 'sidew', 'rightTab'];
+const SAVED = ['mode', 'shelfSize', 'pageSort', 'pageDesc', 'catSort', 'catDesc', 'folderPrev', 'group', 'view', 'size', 'fit', 'theme', 'sort', 'desc', 'dirsFirst', 'dbl', 'tagShow', 'ai', 'confirmDelete', 'hidden', 'welcomed', 'bgAsked', 'lastPath', 'navw', 'sidew', 'rightTab'];
 const saveSettingsSoon = debounce(() => {
   const o = {}; for (const k of SAVED) o[k] = S[k];
   api('/api/settings', o).catch(() => {});
@@ -39,6 +39,7 @@ async function loadState() {
 function applyLook() {
   document.documentElement.dataset.theme = S.theme;
   document.documentElement.style.setProperty('--tile', S.size + 'px');
+  document.documentElement.style.setProperty('--stile', (S.shelfSize || 190) + 'px');
   document.documentElement.style.setProperty('--fit', S.fit);
   document.documentElement.style.setProperty('--navw', S.navw + 'px');
   document.documentElement.style.setProperty('--sidew', S.sidew + 'px');

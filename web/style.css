@@ -398,7 +398,7 @@ body.mode-shelf #shelf { display: flex; flex-direction: column; grid-column: 2 /
 .sgrid.land { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
 .sgrid.port { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .sgrid.sq { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
-.sgrid.files { grid-template-columns: repeat(auto-fill, minmax(var(--tile, 190px), 1fr)); gap: 8px; }
+.sgrid.files { grid-template-columns: repeat(auto-fill, minmax(var(--stile, 190px), 1fr)); gap: 8px; }
 .scard { position: relative; border-radius: 12px; overflow: hidden; background: var(--elev); cursor: pointer; flex: none; border: 1px solid var(--line); transition: transform .12s ease, border-color .12s ease; }
 .scard:hover { transform: translateY(-2px); border-color: var(--accent); }
 .scard .cc { position: absolute; inset: 0; }
@@ -436,7 +436,7 @@ body.mode-shelf #shelf { display: flex; flex-direction: column; grid-column: 2 /
 .phero.profile .poster { width: 150px; height: 225px; border-radius: 12px; overflow: hidden; position: relative; flex: none; background: var(--elev); border: 1px solid var(--line); box-shadow: 0 12px 30px rgba(0, 0, 0, .35); display: grid; place-items: center; color: var(--muted); }
 .phero.profile .poster .cc { position: absolute; inset: 0; }
 .phero.plain .pinfo { padding-top: 20px; }
-.ptabs { display: flex; gap: 2px; padding: 0 22px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 3; }
+.ptabs { display: flex; gap: 2px; padding: 0 22px; border-bottom: 1px solid var(--line); background: var(--bg); flex: none; }
 .ptab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 11px 13px 10px; font-weight: 500; font-size: 13.5px; display: inline-flex; gap: 6px; align-items: center; }
 .ptab:hover { color: var(--text); }
 .ptab.on { color: var(--text); border-color: var(--accent); }
@@ -455,7 +455,7 @@ body.mode-shelf #shelf { display: flex; flex-direction: column; grid-column: 2 /
 .stile .cc { position: absolute; inset: 0; }
 .srating { position: absolute; left: 6px; bottom: 5px; font-size: 11px; color: #ffd24d; text-shadow: 0 1px 2px #000; }
 .smore { display: block; margin: 16px auto 0; }
-.preset-gallery .sgrid.files { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.preset-gallery .sgrid.files { gap: 10px; }
 
 /* category layout chooser */
 .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
@@ -517,3 +517,17 @@ select.txt.small { padding: 3px 6px; font-size: 12.5px; height: auto; }
 .phero.profile.withbanner .pinfo { color: #fff; }
 .phero.profile.withbanner .pstats { color: #d3d8e6; }
 .phero.profile.withbanner .catchip { background: rgba(0, 0, 0, .35); color: #fff; border-color: rgba(255, 255, 255, .25); }
+
+/* tag page: banner, tabs and bar stay put, only the files scroll */
+.sbody.tagview { overflow: hidden; display: flex; flex-direction: column; }
+.tagpage { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tagpage > .phero { flex: none; }
+.pfixed { flex: none; padding: 0 24px; }
+.pfixed:empty { display: none; }
+.pfixed .pfbar, .pfixed .tbar { margin-bottom: 10px; }
+.pfixed .tsugg { margin-bottom: 10px; }
+.pscroll { flex: 1; min-height: 0; overflow: auto; outline: none; }
+.pscroll > .spad { padding-top: 0; }
+.pscroll .shead:first-child { margin-top: 6px; }
+.pfsize { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.pfsize .sizer { width: 110px; }
