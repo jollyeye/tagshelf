@@ -455,14 +455,38 @@ function pageFilterBar(P) {
     h('div', { class: 'pftags' }, pf.inc.map((t) => chip(t, false)), pf.exc.map((t) => chip(t, true)), tagIn, dl),
     pfActive() ? h('button', { class: 'btn small', onclick: () => { SH.pf = { q: '', inc: [], exc: [] }; redrawPage(); } }, 'Clear') : null,
     h('div', { class: 'pfsort' }, h('span', { class: 'muted' }, 'Order'), sortSel, dirBtn),
+    layoutPicker(P),
     h('label', { class: 'pfsize', title: 'Tile size (Ctrl + mouse wheel)' }, icon('image', 14),
       h('input', { class: 'sizer', type: 'range', min: 110, max: 420, step: 10, value: S.shelfSize || 190, oninput: (e) => setShelfSize(+e.target.value) })));
+}
+
+// ---------------------------------------------------------------- how a page shows its files: grid, rows or masonry
+// remembered per category (tags without a category share one choice)
+const LOOK_DEFAULT = { v: 'grid', shape: 'sq', fit: false };
+function lookKey(P) { return (P && P.category && P.category.id) || '_'; }
+function pageLook(P) { return Object.assign({}, LOOK_DEFAULT, (S.pageLayouts || {})[lookKey(P)]); }
+function setPageLook(P, change) {
+  S.pageLayouts = Object.assign({}, S.pageLayouts || {}, { [lookKey(P)]: Object.assign(pageLook(P), change) });
+  saveSettingsSoon(); redrawPage();
+}
+function layoutPicker(P) {
+  const L = pageLook(P);
+  const seg = h('div', { class: 'tmode lseg', title: 'Layout' }, [['grid', 'grid', 'Grid - same-size tiles'], ['rows', 'rows', 'Rows - every picture keeps its shape, rows fill the width'], ['masonry', 'masonry', 'Masonry - columns, every picture keeps its shape']]
+    .map(([v, ic, tip]) => h('button', { class: 'tmb' + (L.v === v ? ' on' : ''), title: tip, dataset: { look: v }, onclick: () => setPageLook(P, { v }) }, icon(ic, 15), h('span', {}, v[0].toUpperCase() + v.slice(1)))));
+  const extra = L.v !== 'grid' ? [] : [
+    h('select', { class: 'txt small lshape', title: 'Tile shape', onchange: (e) => setPageLook(P, { shape: e.target.value }) },
+      [['sq', 'Square'], ['port', 'Portrait'], ['land', 'Landscape']].map(([v, l]) => h('option', { value: v, selected: v === L.shape }, l))),
+    h('button', { class: 'ibtn lfit' + (L.fit ? ' on' : ''), title: L.fit ? 'Showing the whole picture - click to fill the tiles' : 'Tiles are filled (edges cut off) - click to show the whole picture',
+      onclick: () => setPageLook(P, { fit: !L.fit }) }, icon('fit', 16)),
+  ];
+  return h('div', { class: 'pflook' }, seg, ...extra);
 }
 
 function setShelfSize(v) {
   S.shelfSize = Math.max(110, Math.min(420, v));
   applyLook();
   saveSettingsSoon();
+  layoutMasonry();
   const r = $('#shelf .pfsize .sizer'); if (r && +r.value !== S.shelfSize) r.value = S.shelfSize;
 }
 
@@ -629,7 +653,7 @@ function tagPageEl(P) {
   else {
     fixed = pageFilterBar(P);
     scrolling = h('div', {}, h('div', { class: 'shead' }, h('h3', {}, tab.label), h('em', {}, `${list.length} file${list.length === 1 ? '' : 's'}` + (pfActive() ? ' match' : '') + (byMonth ? ' · by month' : ''))),
-      filesGrid(list, byMonth));
+      filesGrid(list, byMonth, pageLook(P)));
   }
   const scroller = h('div', { class: 'pscroll', tabindex: '-1' }, h('div', { class: 'spad' }, scrolling));
   // Ctrl + mouse wheel changes the tile size, like in Files
@@ -651,16 +675,69 @@ function heroPic(c) {
   return cell;
 }
 
-function fileTile(f, list) {
-  return h('div', { class: 'stile', title: f.n, dataset: { p: f.p },
+// a file's shape (width / height), kept within sensible limits so odd panoramas don't take over a row
+function fileRatio(f) { return f.w && f.h ? Math.max(0.35, Math.min(3.2, f.w / f.h)) : 1; }
+
+function fileTile(f, list, look) {
+  const r = fileRatio(f);
+  const dpr = window.devicePixelRatio || 1;
+  // bigger previews when the tile is shown big (high-DPI screens, big sizes, tall pictures in masonry)
+  const big = (S.shelfSize || 190) * 1.25 * dpr * (look.v === 'grid' && look.fit ? 1 : Math.max(r, 1 / r)) > 400;
+  const tile = h('div', { class: 'stile', title: f.n, dataset: { p: f.p },
     onclick: () => openViewer(f.p, list.filter((x) => x.k === 'image' || x.k === 'video' || x.k === 'audio')),
     oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); fileMenu(e.clientX, e.clientY, f); } },
-    (f.k === 'image' || f.k === 'video') ? coverCell({ p: f.p, k: f.k, x: f.x, m: f.m }, true) : h('div', { class: 'cc' }, h('div', { class: 'cc-ico' }, icon(f.k === 'audio' ? 'music' : 'file', 26))),
+    (f.k === 'image' || f.k === 'video') ? coverCell({ p: f.p, k: f.k, x: f.x, m: f.m, big }, true) : h('div', { class: 'cc' }, h('div', { class: 'cc-ico' }, icon(f.k === 'audio' ? 'music' : 'file', 26))),
     (f.r || 0) > 0 ? h('span', { class: 'srating' }, '★'.repeat(f.r)) : null);
+  if (look.v !== 'grid') {
+    shapeTile(tile, r, look);
+    // a shape we didn't know yet (new picture, video): learn it from the preview
+    const img = tile.querySelector('img');
+    if (img && !(f.w && f.h)) img.addEventListener('load', () => {
+      if (!img.naturalWidth || !img.naturalHeight) return;
+      f.w = img.naturalWidth; f.h = img.naturalHeight;
+      shapeTile(tile, fileRatio(f), look);
+      if (look.v === 'masonry') layoutMasonry();
+    });
+  }
+  return tile;
 }
 
-function filesGrid(list, byMonth) {
+function shapeTile(tile, r, look) {
+  tile.dataset.r = r;
+  // rows: every tile grows in proportion to its width, so a row ends up with one height
+  if (look.v === 'rows') tile.style.flex = `${r} ${r} calc(var(--stile, 190px) * ${r})`;
+  tile.style.setProperty('--r', r);
+}
+
+function filesBox(look) {
+  if (look.v === 'rows') return h('div', { class: 'jrows' });
+  if (look.v === 'masonry') return h('div', { class: 'masonry' });
+  return h('div', { class: 'sgrid files shape-' + look.shape + (look.fit ? ' fit' : '') });
+}
+
+// masonry: columns of equal width; each picture goes to the shortest column, so the order reads left to right
+let masonryRO = null;
+function layoutMasonry() {
+  for (const box of document.querySelectorAll('#shelf .masonry')) {
+    const W = box.clientWidth; if (!W) continue;
+    const gap = 8, min = S.shelfSize || 190;
+    const n = Math.max(1, Math.floor((W + gap) / (min + gap)));
+    const cw = (W - gap * (n - 1)) / n;
+    const hs = new Array(n).fill(0);
+    for (const t of box.children) {
+      let c = 0; for (let i = 1; i < n; i++) if (hs[i] < hs[c] - 1) c = i;
+      const th = Math.round(cw / (+t.dataset.r || 1));
+      t.style.left = (c * (cw + gap)) + 'px'; t.style.top = hs[c] + 'px'; t.style.width = cw + 'px'; t.style.height = th + 'px';
+      hs[c] += th + gap;
+    }
+    box.style.height = Math.max(0, Math.max(...hs) - gap) + 'px';
+  }
+}
+const layoutMasonrySoon = (() => { let q = false; return () => { if (q) return; q = true; requestAnimationFrame(() => { q = false; layoutMasonry(); }); }; })();
+
+function filesGrid(list, byMonth, look) {
   if (!list.length) return h('p', { class: 'none' }, 'Nothing here.');
+  look = look || LOOK_DEFAULT;
   const shown = list.slice(0, SH.shown);
   const parts = [];
   if (byMonth) {
@@ -668,10 +745,17 @@ function filesGrid(list, byMonth) {
     let key = null, cur = null;
     for (const f of shown) {
       const k = fmt.format(new Date((f.a || f.m) * 1000));
-      if (k !== key) { key = k; cur = h('div', { class: 'sgrid files' }); parts.push(h('div', { class: 'shead' }, h('h3', {}, k)), cur); }
-      cur.append(fileTile(f, list));
+      if (k !== key) { key = k; cur = filesBox(look); parts.push(h('div', { class: 'shead' }, h('h3', {}, k)), cur); }
+      cur.append(fileTile(f, list, look));
     }
-  } else parts.push(h('div', { class: 'sgrid files' }, shown.map((f) => fileTile(f, list))));
+  } else { const box = filesBox(look); box.append(...shown.map((f) => fileTile(f, list, look))); parts.push(box); }
+  if (look.v === 'masonry') {
+    // lay out once the boxes are on screen, and again whenever the window changes size
+    requestAnimationFrame(layoutMasonry);
+    if (!masonryRO) masonryRO = new ResizeObserver(layoutMasonrySoon);
+    masonryRO.disconnect();
+    setTimeout(() => { for (const b of document.querySelectorAll('#shelf .masonry')) masonryRO.observe(b); }, 0);
+  }
   if (list.length > shown.length) {
     const more = h('button', { class: 'btn smore', onclick: () => { SH.shown += PAGE_CHUNK * 2; const top = scrollBox().scrollTop; renderShelf(); scrollBox().scrollTop = top; } }, `Show more (${list.length - shown.length} left)`);
     parts.push(more);

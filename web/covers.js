@@ -79,7 +79,7 @@ function ensurePoster(it) {
 // one picture of a preview
 function coverCell(it, withPlay) {
   const cell = h('div', { class: 'cc' });
-  const src = it.k === 'video' ? thumbUrl(it.p, it.m) : (THUMB_EXT.has(it.x) ? thumbUrl(it.p, it.m) : fileUrl(it.p));
+  const src = it.k === 'video' ? thumbUrl(it.p, it.m) : (THUMB_EXT.has(it.x) ? thumbUrl(it.p, it.m, it.big) : fileUrl(it.p));
   const img = h('img', { src, loading: 'lazy', decoding: 'async', alt: '', draggable: 'false' });
   img.addEventListener('error', async () => {
     if (it.k !== 'video' || posterFailed.has(it.p)) { cell.replaceChildren(h('div', { class: 'cc-ico' }, icon(it.k === 'video' ? 'video' : 'image', 20))); return; }

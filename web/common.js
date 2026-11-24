@@ -59,6 +59,9 @@ const ICONS = {
   eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   alert: '<path d="M12 3 2 20h20z"/><path d="M12 10v4M12 17h.01"/>',
   play: '<path d="m8 5 11 7-11 7z"/>',
+  rows: '<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="12" y="4" width="9" height="7" rx="1"/><rect x="3" y="13" width="11" height="7" rx="1"/><rect x="16" y="13" width="5" height="7" rx="1"/>',
+  masonry: '<rect x="3" y="3" width="8" height="10" rx="1"/><rect x="13" y="3" width="8" height="6" rx="1"/><rect x="3" y="15" width="8" height="6" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/>',
+  fit: '<rect x="3" y="3" width="18" height="18" rx="2"/><rect x="8.5" y="6" width="7" height="12" rx="1"/>',
   newfolder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/>',
 };
 function icon(name, size = 16) {
@@ -79,7 +82,7 @@ async function api(path, body) {
 }
 const enc = encodeURIComponent;
 const fileUrl = (p) => '/file?p=' + enc(p);
-const thumbUrl = (p, m) => '/thumb?p=' + enc(p) + '&v=' + (m || 0);
+const thumbUrl = (p, m, big) => '/thumb?p=' + enc(p) + '&v=' + (m || 0) + (big ? '&L=1' : '');
 
 function fmtSize(n) {
   if (n == null) return '';

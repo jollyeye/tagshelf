@@ -3,6 +3,7 @@
 
 pub mod ai;
 pub mod covers;
+pub mod dims;
 pub mod dups;
 pub mod fsops;
 pub mod http;
@@ -117,6 +118,7 @@ pub fn start(opts: Options, shell: Arc<dyn Shell>) -> Result<Started, String> {
 
     let lib = store::Library::load(&data_dir).map_err(|e| format!("cannot load library: {e}"))?;
     ai::vecs().open(&data_dir);
+    dims::open(&data_dir);
 
     let listener = std::net::TcpListener::bind(("127.0.0.1", opts.port))
         .or_else(|_| std::net::TcpListener::bind(("127.0.0.1", 0)))
@@ -168,6 +170,7 @@ pub fn shutdown(srv: &Server) {
     if let Err(e) = srv.lib.flush() {
         log::warn(&format!("final save failed: {e}"));
     }
+    dims::save();
     if let Err(e) = ai::vecs().save() {
         log::warn(&format!("saving fingerprints failed: {e}"));
     }

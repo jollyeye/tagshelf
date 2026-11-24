@@ -10,6 +10,8 @@ use std::io::{BufReader, Read};
 use std::sync::{Condvar, Mutex};
 
 pub const THUMB_MAX: u32 = 360;
+/// sharper previews for big tiles (large Shelf sizes, high-DPI screens)
+pub const THUMB_BIG: u32 = 900;
 
 pub fn thumb_exts(ext: &str) -> bool {
     matches!(ext, ".jpg" | ".jpeg" | ".jfif" | ".png" | ".gif")
@@ -25,6 +27,10 @@ fn hexi(n: i64) -> String {
 
 pub fn thumb_path(data_dir: &str, f: &FileRec) -> String {
     join(&join(data_dir, "thumbs"), &format!("{}_{}_{}.jpg", f.id, hexi(f.mtime), hexi(f.size)))
+}
+
+pub fn thumb_path_big(data_dir: &str, f: &FileRec) -> String {
+    join(&join(data_dir, "thumbs"), &format!("{}_{}_{}_L.jpg", f.id, hexi(f.mtime), hexi(f.size)))
 }
 
 // ---------- a small counting semaphore ----------
@@ -64,19 +70,23 @@ struct Rgb {
 }
 
 pub fn make_thumb(src: &str, dst: &str, ext: &str) -> Result<(), String> {
+    make_thumb_sized(src, dst, ext, THUMB_MAX)
+}
+
+pub fn make_thumb_sized(src: &str, dst: &str, ext: &str, max: u32) -> Result<(), String> {
     let _p = acquire();
     if std::path::Path::new(dst).exists() {
         return Ok(()); // another request produced it while we waited
     }
     let img = if matches!(ext, ".jpg" | ".jpeg" | ".jfif") {
-        match decode_jpeg_scaled(src) {
+        match decode_jpeg_scaled(src, max) {
             Ok(i) => i,
             Err(_) => decode_generic(src)?, // unusual JPEGs (e.g. arithmetic coding): let the image crate try
         }
     } else {
         decode_generic(src)?
     };
-    let mut th = scale_box(&img, THUMB_MAX);
+    let mut th = scale_box(&img, max);
     if matches!(ext, ".jpg" | ".jpeg" | ".jfif") {
         th = orient(th, exif_orientation(src));
     }
@@ -95,7 +105,7 @@ pub fn make_thumb(src: &str, dst: &str, ext: &str) -> Result<(), String> {
     })
 }
 
-fn decode_jpeg_scaled(src: &str) -> Result<Rgb, String> {
+fn decode_jpeg_scaled(src: &str, max: u32) -> Result<Rgb, String> {
     let f = std::fs::File::open(src).map_err(|e| e.to_string())?;
     let mut dec = jpeg_decoder::Decoder::new(BufReader::with_capacity(256 * 1024, f));
     dec.read_info().map_err(|e| e.to_string())?;
@@ -105,9 +115,9 @@ fn decode_jpeg_scaled(src: &str) -> Result<Rgb, String> {
         return Err("image dimensions not supported".into());
     }
     let longest = w.max(h);
-    if longest > THUMB_MAX {
-        let rw = ((w as u64 * THUMB_MAX as u64) / longest as u64).max(1) as u16;
-        let rh = ((h as u64 * THUMB_MAX as u64) / longest as u64).max(1) as u16;
+    if longest > max {
+        let rw = ((w as u64 * max as u64) / longest as u64).max(1) as u16;
+        let rh = ((h as u64 * max as u64) / longest as u64).max(1) as u16;
         dec.scale(rw, rh).map_err(|e| e.to_string())?;
     }
     let data = dec.decode().map_err(|e| e.to_string())?;

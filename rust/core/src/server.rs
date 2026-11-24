@@ -546,9 +546,11 @@ impl Server {
         if f.kind != "image" || !thumbs::thumb_exts(&f.ext) {
             return fallback();
         }
-        let dst = thumbs::thumb_path(&self.data_dir, &f);
+        let big = url.q("L") == "1";
+        let dst = if big { thumbs::thumb_path_big(&self.data_dir, &f) } else { thumbs::thumb_path(&self.data_dir, &f) };
         if !std::path::Path::new(&dst).exists() {
-            if let Err(e) = thumbs::make_thumb(&p, &dst, &f.ext) {
+            let made = if big { thumbs::make_thumb_sized(&p, &dst, &f.ext, thumbs::THUMB_BIG) } else { thumbs::make_thumb(&p, &dst, &f.ext) };
+            if let Err(e) = made {
                 crate::store::log::warn(&format!("thumbnail failed for {p}: {e}"));
                 return fallback();
             }
@@ -575,6 +577,11 @@ impl Server {
         if let Err(e) = std::fs::write(&tmp, &body).and_then(|_| std::fs::rename(&tmp, &dst)) {
             let _ = std::fs::remove_file(&tmp);
             return text(500, &e.to_string());
+        }
+        // the still has the video's shape: remember it for the Shelf layouts
+        if let Ok((w, h)) = image::ImageReader::with_format(std::io::Cursor::new(&body), image::ImageFormat::Jpeg).into_dimensions() {
+            crate::dims::put(&p, f.mtime, f.size, w, h);
+            crate::dims::save_soon();
         }
         empty(204)
     }

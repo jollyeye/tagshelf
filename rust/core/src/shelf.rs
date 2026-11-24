@@ -146,6 +146,14 @@ struct PageFile {
     #[serde(skip_serializing_if = "is_zero")]
     r: i64,
     a: i64,
+    /// width and height (images and videos whose still has been made), for the rows / masonry layouts
+    #[serde(skip_serializing_if = "is_zero_u")]
+    w: u32,
+    #[serde(skip_serializing_if = "is_zero_u")]
+    h: u32,
+}
+fn is_zero_u(n: &u32) -> bool {
+    *n == 0
 }
 fn is_zero(n: &i64) -> bool {
     *n == 0
@@ -161,7 +169,7 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
             .files
             .values()
             .filter(|f| !f.missing && !f.isdir && f.tags.contains(&tag))
-            .map(|f| PageFile { n: f.name.clone(), p: f.path.clone(), k: f.kind.clone(), x: f.ext.clone(), s: f.size, m: f.mtime, t: f.tags.clone(), r: f.rating, a: f.added })
+            .map(|f| PageFile { n: f.name.clone(), p: f.path.clone(), k: f.kind.clone(), x: f.ext.clone(), s: f.size, m: f.mtime, t: f.tags.clone(), r: f.rating, a: f.added, w: 0, h: 0 })
             .collect();
         (tag, info, files, cards(&d), d.categories.clone())
     };
@@ -181,6 +189,33 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
         }
     });
     files.sort_by(|a, b| b.a.cmp(&a.a).then_with(|| natural_cmp(&lower(&a.n), &lower(&b.n))));
+
+    // each file's shape: remembered sizes are instant; new pictures are read from their header for
+    // a moment, the rest in the background (the page learns those from the previews meanwhile)
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    let mut later: Vec<(String, String, i64, i64)> = Vec::new();
+    for f in files.iter_mut() {
+        if let Some((w, h)) = crate::dims::get(&f.p, f.m, f.s) {
+            (f.w, f.h) = (w, h);
+        } else if f.k == "image" {
+            if Instant::now() < deadline {
+                if let Some((w, h)) = crate::dims::of(&f.p, &f.x, f.m, f.s) {
+                    (f.w, f.h) = (w, h);
+                }
+            } else {
+                later.push((f.p.clone(), f.x.clone(), f.m, f.s));
+            }
+        }
+    }
+    if !later.is_empty() {
+        std::thread::spawn(move || {
+            for (p, x, m, s) in later {
+                let _ = crate::dims::of(&p, &x, m, s);
+            }
+            crate::dims::save_soon();
+        });
+    }
+    crate::dims::save_soon();
 
     // the page's own tabs: tags of a category, filtered by your list
     let tag_cat: HashMap<String, String> = lib.r().tags.iter().map(|(n, i)| (n.clone(), i.category.clone())).collect();
