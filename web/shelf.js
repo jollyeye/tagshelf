@@ -6,6 +6,8 @@ const SH = { view: 'home', cat: '', tag: '', tab: 'all', home: null, page: null,
 const PRESET_SHAPE = { banner: 'land', profile: 'port', gallery: 'sq', timeline: 'land' };
 const PRESET_NAMES = { banner: 'Banner', profile: 'Profile', gallery: 'Gallery', timeline: 'Timeline' };
 const PAGE_CHUNK = 240;
+// the Slideshow button is hidden for now; the slideshow itself still works (set to true to bring it back)
+const SHOW_SLIDESHOW = false;
 // what scrolls: on a tag page only the files, elsewhere the whole Shelf
 const scrollBox = () => $('#shelf .pscroll') || $('#shelf .sbody');
 
@@ -500,6 +502,35 @@ function tabMenu(x, y, P, tab) {
   ]);
 }
 
+// order and size for the cards of a category tab
+const TAB_SORTS = [['shared', 'Most shared files'], ['name', 'Name'], ['count', 'Most files'], ['recent', 'Recently tagged']];
+// "Show only" tabs keep your own list order by default; they remember their own choice
+function tabSortKey(only) { return only ? (S.tabSortOnly || 'list') : (S.tabSort && S.tabSort !== 'list' ? S.tabSort : 'shared'); }
+function sortTabItems(items, only) {
+  const k = tabSortKey(only);
+  if (k === 'list') return items; // your own order ("Show only" mode)
+  const dir = S.tabDesc ? -1 : 1;
+  const val = { shared: (t) => t.shared || 0, count: (t) => t.count || 0, recent: (t) => t.last || 0 }[k];
+  return items.slice().sort((a, b) => (val ? (val(a) - val(b)) * dir : collator.compare(a.name, b.name) * dir) || collator.compare(a.name, b.name));
+}
+function tabOrderBar(only) {
+  const k = tabSortKey(only);
+  const opts = (only ? [['list', 'Your list order']] : []).concat(TAB_SORTS);
+  const sel = h('select', { class: 'txt small', title: 'Order', onchange: (e) => { if (only) S.tabSortOnly = e.target.value; else S.tabSort = e.target.value; S.tabDesc = e.target.value !== 'name'; saveSettingsSoon(); redrawPage(); } },
+    opts.map(([v, l]) => h('option', { value: v, selected: v === k }, l)));
+  const dir = k === 'list' ? null : h('button', { class: 'ibtn', title: S.tabDesc ? 'Descending - click to reverse' : 'Ascending - click to reverse',
+    onclick: () => { S.tabDesc = !S.tabDesc; saveSettingsSoon(); redrawPage(); } }, icon(S.tabDesc ? 'down' : 'up', 16));
+  return h('div', { class: 'tsort' }, h('span', { class: 'muted' }, 'Order'), sel, dir,
+    h('label', { class: 'pfsize', title: 'Card size (Ctrl + mouse wheel)' }, icon('image', 14),
+      h('input', { class: 'sizer csizer', type: 'range', min: 110, max: 360, step: 10, value: S.cardSize || 180, oninput: (e) => setCardSize(+e.target.value) })));
+}
+function setCardSize(v) {
+  S.cardSize = Math.max(110, Math.min(360, v));
+  applyLook();
+  saveSettingsSoon();
+  const r = $('#shelf .csizer'); if (r && +r.value !== S.cardSize) r.value = S.cardSize;
+}
+
 function tabView(P, tab) {
   const cat = tab.category;
   const shape = cat ? (PRESET_SHAPE[cat.preset] || 'land') : 'land';
@@ -524,7 +555,7 @@ function tabView(P, tab) {
   };
   inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } e.stopPropagation(); });
   inp.addEventListener('change', () => { if (known.has(inp.value.trim().toLowerCase())) commit(); });
-  const bar = h('div', { class: 'tbar' }, seg,
+  const bar = h('div', { class: 'tbar' }, seg, tabOrderBar(only),
     h('div', { class: 'tlist' }, chips.length ? chips : h('span', { class: 'none' }, only ? 'Nothing listed yet.' : 'Nothing left out.'), inp, dl),
     h('button', { class: 'ibtn', title: 'Tab options', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tabMenu(r.left, r.bottom + 4, P, tab); } }, icon('more', 16)));
   // in "only" mode: one-click suggestions from the tags that share files with this page
@@ -542,7 +573,7 @@ function tabView(P, tab) {
   ].filter(Boolean));
   const shared = (n) => n ? `${n} shared file${n === 1 ? '' : 's'}` : 'no shared files yet';
   const body = tab.items.length
-    ? h('div', { class: 'sgrid ' + shape }, tab.items.map((t) => cardEl(t, shape, { sub: shared(t.shared), menu: cardMenu })))
+    ? h('div', { class: 'sgrid cards ' + shape }, sortTabItems(tab.items, only).map((t) => cardEl(t, shape, { sub: shared(t.shared), menu: cardMenu })))
     : h('p', { class: 'none' }, !cat ? 'This tab\'s category was deleted.'
       : only ? `List the ${cat.name.toLowerCase()} you want to see here.`
       : `No ${cat.name} tag shares files with “${P.name}”` + (list.length ? ' apart from the ones you left out.' : ' yet.'));
@@ -565,13 +596,13 @@ function tagPageEl(P) {
   const catChip = h('button', { class: 'catchip', title: 'Change category', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tagMenu(r.left, r.bottom + 4, P.name); } },
     h('span', { class: 'cdot', style: { background: cat ? cat.color : '#9aa5b8' } }), cat ? cat.name : 'No category', icon('down', 12));
   const actions = h('div', { class: 'pacts' },
-    P.files.some((x) => x.k === 'image' || x.k === 'video') ? h('button', { class: 'btn primary', onclick: () => slideshow(tab.custom ? P.files : list) }, icon('play', 14), 'Slideshow') : null,
+    SHOW_SLIDESHOW && P.files.some((x) => x.k === 'image' || x.k === 'video') ? h('button', { class: 'btn primary', onclick: () => slideshow(tab.custom ? P.files : list) }, icon('play', 14), 'Slideshow') : null,
     h('button', { class: 'btn', onclick: () => showTagInFiles(P) }, icon('folder', 14), 'Show in Files'),
     h('button', { class: 'ibtn', title: 'More', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tagPageMenu(r.left, r.bottom + 4, P); } }, icon('more', 16)));
   const bannerPic = P.banner ? heroPic(P.banner) : null;
   // banner layout: your icon (if any) above the name, always shown as a transparent logo
   const logo = preset === 'banner' && P.icon ? h('div', { class: 'hlogo' }, chosenPic(P.icon, 'logo')) : null;
-  const info = h('div', { class: 'pinfo' }, logo, catChip, h('h1', {}, P.name), h('div', { class: 'pstats' }, stats), actions);
+  const info = h('div', { class: 'pinfo' }, logo, h('div', { class: 'pname' }, h('h1', {}, P.name), catChip, h('div', { class: 'pstats' }, stats)), actions);
   let hero;
   if (preset === 'profile') {
     // the icon: your picture (transparent ones keep their shape) or, if none, the automatic one
@@ -603,9 +634,10 @@ function tagPageEl(P) {
   const scroller = h('div', { class: 'pscroll', tabindex: '-1' }, h('div', { class: 'spad' }, scrolling));
   // Ctrl + mouse wheel changes the tile size, like in Files
   scroller.addEventListener('wheel', (e) => {
-    if (!e.ctrlKey || tab.custom) return;
+    if (!e.ctrlKey) return;
     e.preventDefault();
-    setShelfSize((S.shelfSize || 190) + (e.deltaY < 0 ? 20 : -20));
+    const d = e.deltaY < 0 ? 20 : -20;
+    if (tab.custom) setCardSize((S.cardSize || 180) + d); else setShelfSize((S.shelfSize || 190) + d);
   }, { passive: false });
   return h('div', { class: 'tagpage preset-' + preset }, hero, tabBar, h('div', { class: 'pfixed' }, fixed), scroller);
 }

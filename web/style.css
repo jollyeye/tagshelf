@@ -470,7 +470,8 @@ select.txt.small { padding: 3px 6px; font-size: 12.5px; height: auto; }
 .ptab.add .ico { margin-right: -2px; }
 .ptab .cdot { width: 8px; height: 8px; }
 .tbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 16px 0 12px; padding: 10px 14px; background: var(--elev); border: 1px solid var(--line); border-radius: 11px; }
-.tbar .ibtn { margin-left: auto; }
+.tbar > .ibtn { margin-left: 0; }
+.tbar .tlist { order: 3; flex-basis: 100%; }
 .tchk { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; }
 .tchk input { margin-top: 3px; }
 .tchk span { display: flex; flex-direction: column; gap: 1px; }
@@ -531,3 +532,33 @@ select.txt.small { padding: 3px 6px; font-size: 12.5px; height: auto; }
 .pscroll .shead:first-child { margin-top: 6px; }
 .pfsize { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 .pfsize .sizer { width: 110px; }
+
+/* ---- tag page header: at most a third of the window, everything on one line ---- */
+#shelf { --heroh: min(260px, calc((100vh - 52px) / 3)); }
+.phero .pinfo { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 22px; padding: 16px 26px; width: 100%; box-sizing: border-box; }
+.phero .pname { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; flex: 1; }
+.phero h1 { margin: 0; font-size: 28px; line-height: 1.15; overflow-wrap: anywhere; }
+.pacts { margin-top: 0; margin-left: auto; }
+.phero.banner { min-height: 0; height: var(--heroh); }
+.phero.banner .pinfo { padding-bottom: 18px; }
+.phero.profile { min-height: 0; height: var(--heroh); padding: 14px 0 12px 26px; gap: 4px; align-items: center; box-sizing: border-box; }
+.phero.profile.withbanner { min-height: 0; height: var(--heroh); align-items: center; }
+.phero.profile .poster { height: calc(var(--heroh) - 28px); width: auto; aspect-ratio: 2 / 3; }
+.phero.plain .pinfo { padding: 14px 26px; }
+.hlogo { width: auto; height: calc(var(--heroh) - 60px); max-height: 130px; aspect-ratio: 2.6; max-width: 34vw; margin: 0; flex: none; }
+.hlogo .cc.logo img { object-position: left center; }
+.phero.plain .hlogo { height: 80px; }
+/* category tabs: order + card size */
+.tsort { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-left: auto; }
+.sgrid.cards.land { grid-template-columns: repeat(auto-fill, minmax(calc(var(--ctile, 180px) * 1.3), 1fr)); }
+.sgrid.cards.port { grid-template-columns: repeat(auto-fill, minmax(calc(var(--ctile, 180px) * .78), 1fr)); }
+.sgrid.cards.sq { grid-template-columns: repeat(auto-fill, minmax(var(--ctile, 180px), 1fr)); }
+
+/* narrower windows: keep the tag-page header on one line */
+@media (max-width: 1400px) {
+  .phero .pinfo { gap: 8px 14px; padding: 12px 18px; }
+  .phero h1 { font-size: 22px; }
+  .phero .pname { gap: 6px 10px; }
+  .hlogo { max-width: 18vw; }
+  .phero .pstats { flex-basis: 100%; font-size: 12px; }
+}

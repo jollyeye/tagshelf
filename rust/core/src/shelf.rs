@@ -77,7 +77,7 @@ fn cards(d: &LibData) -> HashMap<String, TagCard> {
     }
     let mut out = HashMap::new();
     for (name, info) in &d.tags {
-        let mut card = TagCard { name: name.clone(), color: info.color.clone(), count: *counts.get(name.as_str()).unwrap_or(&0), cover: None, chosen: false, last: *last.get(name.as_str()).unwrap_or(&0), icon: chosen_pic(&info.icon), banner: chosen_pic(&info.banner) };
+        let mut card = TagCard { name: name.clone(), color: info.color.clone(), count: *counts.get(name.as_str()).unwrap_or(&0), cover: None, chosen: false, last: info.used.max(*last.get(name.as_str()).unwrap_or(&0)), icon: chosen_pic(&info.icon), banner: chosen_pic(&info.banner) };
         if !info.cover.is_empty() {
             if let Ok(md) = std::fs::metadata(&info.cover) {
                 card.cover = Some(pic_of(&info.cover, mtime_unix(&md)));
@@ -186,7 +186,7 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
     let tag_cat: HashMap<String, String> = lib.r().tags.iter().map(|(n, i)| (n.clone(), i.category.clone())).collect();
     let card_json = |t: &str, n: i64| {
         let card = cards.get(t);
-        json!({"name": t, "shared": n, "color": card.map(|c| c.color.clone()), "count": card.map(|c| c.count), "cover": card.and_then(|c| c.cover.clone()),
+        json!({"name": t, "shared": n, "color": card.map(|c| c.color.clone()), "count": card.map(|c| c.count), "last": card.map(|c| c.last), "cover": card.and_then(|c| c.cover.clone()),
             "icon": card.and_then(|c| c.icon.clone()), "banner": card.and_then(|c| c.banner.clone())})
     };
     let tabs: Vec<Value> = info
