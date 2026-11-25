@@ -945,6 +945,7 @@ function itemSub(it) {
   else if (it.c === 'story') parts.push(n(it.scenes, 'scene', 'scenes'), n(it.media, 'panel', 'panels'));
   else parts.push(n(it.media, 'panel', 'panels'));
   if (!it.d) parts.push((it.x || '').replace('.', '').toUpperCase() + ' file');
+  if ((it.paths || []).length > 1) parts.push(`${it.paths.length} folders`);
   return parts.filter(Boolean).join(' · ') || (it.d ? 'empty folder' : '');
 }
 
@@ -966,7 +967,9 @@ function itemMenu(x, y, it) {
     it.custom ? { label: 'Automatic preview', icon: 'refresh', fn: () => setItemCover(it.p, '') } : null,
     { label: 'Content type…', icon: 'film', fn: () => ctypeMenu(x, y, [e]) },
     '-',
-    { label: 'Show in Files', icon: 'folder', fn: async () => { await setMode('files', { noRefresh: true }); go(it.d ? it.p : dirOf(it.p), it.d ? {} : { select: it.p }); } },
+    ...((it.paths || []).length > 1
+      ? it.paths.map((q) => ({ label: 'Show in Files: ' + q, icon: 'folder', fn: async () => { await setMode('files', { noRefresh: true }); go(q); } }))
+      : [{ label: 'Show in Files', icon: 'folder', fn: async () => { await setMode('files', { noRefresh: true }); go(it.d ? it.p : dirOf(it.p), it.d ? {} : { select: it.p }); } }]),
     { label: 'Show in Explorer', icon: 'ext', fn: () => api('/api/open', { Path: it.p, Reveal: true }).catch(fail) },
   ].filter(Boolean));
 }
@@ -1055,7 +1058,7 @@ function itemPageEl() {
   const poster = h('div', { class: 'poster' }, it.cover ? heroPic(it.cover) : h('div', { class: 'cc-ico' }, icon(c.icon, 40)));
   const playable = it.c !== 'series' && (it.d || it.k === 'image' || it.k === 'video');
   const info = h('div', { class: 'pinfo' }, h('div', { class: 'pname' }, h('h1', {}, it.n), h('span', { class: 'ctb', style: { '--ct': c.color } }, icon(c.icon, 12), h('span', {}, c.label)),
-    h('div', { class: 'pstats' }, [itemSub(it), it.parent ? 'in ' + it.parent.n : null].filter(Boolean).join(' · ')),
+    h('div', { class: 'pstats', title: (it.paths || [it.p]).join('\n') }, [itemSub(it), it.parent ? 'in ' + it.parent.n : null].filter(Boolean).join(' · ')),
     (it.t || []).length ? h('div', { class: 'chips' }, it.t.map((t) => h('span', { class: 'chip', style: chipStyle(tagColor(t)), dataset: { tag: t }, onclick: () => openTagPage(t) }, h('span', { class: 'chip-t' }, t)))) : null),
   h('div', { class: 'pacts' },
     playable ? h('button', { class: 'btn primary', onclick: () => openPlayer(it.p) }, icon('play', 14), 'Play') : null,

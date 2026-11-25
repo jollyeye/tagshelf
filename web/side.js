@@ -87,6 +87,15 @@ function tagsTab() {
       playable ? h('button', { class: 'btn small', onclick: () => openPlayer(one.p) }, icon('play', 13), 'Play') : null,
       one && one.c === 'series' ? h('button', { class: 'btn small', onclick: () => openItemPage(one.p) }, icon('stack', 13), 'Open') : null,
       es.some((e) => e.np) ? h('span', { class: 'muted', title: 'Left out when its scene or story plays' }, '· left out of playback') : null));
+    if (one && one.d && one.c === 'series') {
+      const box = h('div', { class: 'twins' });
+      kids.push(box);
+      api('/api/ctype/twins', { Path: one.p }).then((r) => {
+        if (!r.paths || !r.paths.length) return;
+        box.replaceChildren(h('span', { class: 'muted' }, `Same series as ${r.paths.length === 1 ? 'this folder' : 'these folders'} (same name) - tags are shared:`),
+          ...r.paths.map((q) => h('a', { class: 'twin', title: 'Open', onclick: () => go(q) }, icon('folder', 13), q)));
+      }).catch(() => {});
+    }
   }
 
   // current tags

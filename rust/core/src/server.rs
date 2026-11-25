@@ -280,6 +280,7 @@ impl Server {
             ("POST", "/api/ctype/noplay") => ctypes::set_noplay(self.lib, &args.strs("Paths"), args.bool("On")).map(|_| ok()),
             ("POST", "/api/ctype/detect") => ctypes::detect(self.lib, &args.str("Path")),
             ("POST", "/api/ctype/page") => ctypes::page(self.lib, &args.str("Type")),
+            ("POST", "/api/ctype/twins") => ctypes::twins(self.lib, &args.str("Path")),
             ("POST", "/api/ctype/children") => ctypes::children(self.lib, &args.str("Path")),
             ("POST", "/api/play") => ctypes::playlist(self.lib, &args.str("Path")),
             ("POST", "/api/durations") => {

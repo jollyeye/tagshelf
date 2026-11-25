@@ -246,6 +246,29 @@ impl LibData {
         name
     }
 
+    /// Series folders with exactly the same name (on other drives, say) are one series: these are
+    /// the others of `path`'s series (empty when it is not a series folder).
+    pub fn series_twins(&self, path: &str) -> Vec<String> {
+        let Some(me) = self.files.get(&file_id(path)) else { return vec![] };
+        if !(me.isdir && me.ctype == "series") {
+            return vec![];
+        }
+        self.files.values().filter(|f| f.isdir && f.ctype == "series" && !f.missing && f.name == me.name && f.id != me.id).map(|f| f.path.clone()).collect()
+    }
+
+    /// The paths plus the twins of any series folder among them (they share their tags).
+    pub fn with_twins(&self, paths: &[String]) -> Vec<String> {
+        let mut out: Vec<String> = paths.to_vec();
+        for p in paths {
+            for t in self.series_twins(p) {
+                if !out.iter().any(|x| same_path(x, &t)) {
+                    out.push(t);
+                }
+            }
+        }
+        out
+    }
+
     pub fn ensure(&mut self, path: &str) -> std::io::Result<&mut FileRec> {
         let id = file_id(path);
         if !self.files.contains_key(&id) {
@@ -566,7 +589,8 @@ impl Library {
         }
         let mut out = HashMap::new();
         let mut first_err = None;
-        for p in paths {
+        let paths = d.with_twins(paths);
+        for p in &paths {
             let id = file_id(p);
             if !d.files.contains_key(&id) {
                 if add_c.is_empty() {
@@ -600,7 +624,16 @@ impl Library {
     pub fn set_exact_tags(&'static self, items: &serde_json::Map<String, Value>) -> HashMap<String, Option<Vec<String>>> {
         let mut d = self.w();
         let mut out = HashMap::new();
-        for (p, tags) in items {
+        // a series' twins get the same tags
+        let mut all: Vec<(String, Value)> = items.iter().map(|(p, t)| (p.clone(), t.clone())).collect();
+        for (p, t) in items {
+            for tw in d.series_twins(p) {
+                if !items.keys().any(|k| same_path(k, &tw)) {
+                    all.push((tw, t.clone()));
+                }
+            }
+        }
+        for (p, tags) in &all {
             let mut nt: Vec<String> = vec![];
             for t in strs_of(Some(tags)) {
                 let c = d.canon(&t);

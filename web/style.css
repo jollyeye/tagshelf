@@ -667,3 +667,6 @@ select.txt.small { padding: 3px 6px; font-size: 12.5px; height: auto; }
 .pltip[hidden] { display: none; }
 /* messages stay clear of the player's controls */
 body:has(#player) #toast { bottom: 120px; pointer-events: none; }
+.twins { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.twins:empty { display: none; }
+.twins .twin { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

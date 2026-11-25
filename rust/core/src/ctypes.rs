@@ -56,6 +56,31 @@ pub fn set(lib: &'static Library, paths: &[String], t: &str) -> ApiResult<HashMa
             d.files.remove(&id);
         }
     }
+    if t == "series" {
+        let marked: Vec<String> = out.keys().cloned().collect();
+        for p in marked {
+            let twins = d.series_twins(&p);
+            if twins.is_empty() {
+                continue;
+            }
+            let mut all: Vec<String> = vec![];
+            for q in twins.iter().chain(std::iter::once(&p)) {
+                if let Some(f) = d.files.get(&file_id(q)) {
+                    for tg in &f.tags {
+                        if !all.contains(tg) {
+                            all.push(tg.clone());
+                        }
+                    }
+                }
+            }
+            crate::util::sort_tags(&mut all);
+            for q in twins.iter().chain(std::iter::once(&p)) {
+                if let Some(f) = d.files.get_mut(&file_id(q)) {
+                    f.tags = all.clone();
+                }
+            }
+        }
+    }
     lib.touch(&mut d);
     match first_err {
         Some(e) if out.is_empty() => Err(e),
@@ -310,6 +335,8 @@ fn marked_items(lib: &Library, keep: impl Fn(&FileRec) -> bool) -> Value {
     let kids = kid_counts(&mk);
     let deadline = Instant::now() + Duration::from_secs(4);
     let mut items: Vec<Value> = vec![];
+    let mut recs = recs;
+    recs.sort_by(|a, b| natural_cmp(&lower(&a.path), &lower(&b.path)));
     for mut f in recs {
         let slow = Instant::now() > deadline;
         if !slow {
@@ -321,7 +348,49 @@ fn marked_items(lib: &Library, keep: impl Fn(&FileRec) -> bool) -> Value {
         }
         items.push(item_json(lib, &f, &mk, &kids, slow));
     }
-    Value::Array(items)
+    Value::Array(join_series(items))
+}
+
+/// Series folders with exactly the same name are one series: one item with every folder in "paths",
+/// what is inside added up, and the tags of all of them.
+fn join_series(items: Vec<Value>) -> Vec<Value> {
+    let mut out: Vec<Value> = vec![];
+    let mut at: HashMap<String, usize> = HashMap::new();
+    for mut it in items {
+        let p = it["p"].as_str().unwrap_or("").to_string();
+        it["paths"] = json!([p]);
+        if !(it["c"] == "series" && it["d"] == true) {
+            out.push(it);
+            continue;
+        }
+        let key = it["n"].as_str().unwrap_or("").to_string();
+        let Some(&i) = at.get(&key) else {
+            at.insert(key, out.len());
+            out.push(it);
+            continue;
+        };
+        let first = &mut out[i];
+        first["paths"].as_array_mut().unwrap().push(json!(p));
+        for k in ["media", "scenes", "stories"] {
+            first[k] = json!(first[k].as_i64().unwrap_or(0) + it[k].as_i64().unwrap_or(0));
+        }
+        let mut tags: Vec<String> = first["t"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+        for x in it["t"].as_array().into_iter().flatten().filter_map(|x| x.as_str()) {
+            if !tags.iter().any(|y| y == x) {
+                tags.push(x.to_string());
+            }
+        }
+        crate::util::sort_tags(&mut tags);
+        first["t"] = json!(tags);
+        first["r"] = json!(first["r"].as_i64().unwrap_or(0).max(it["r"].as_i64().unwrap_or(0)));
+        first["a"] = json!(first["a"].as_i64().unwrap_or(0).max(it["a"].as_i64().unwrap_or(0)));
+        // a picture you chose wins over an automatic one
+        if (first["cover"].is_null() || first["custom"] != true) && !it["cover"].is_null() && (it["custom"] == true || first["cover"].is_null()) {
+            first["cover"] = it["cover"].clone();
+            first["custom"] = it["custom"].clone();
+        }
+    }
+    out
 }
 
 /// Everything of one type, for the Shelf's Content pages. Panels: every tagged or rated picture/video
@@ -355,9 +424,13 @@ pub fn with_tag(lib: &Library, t: &str, tag: &str) -> Value {
 /// Counts per type, for the Shelf's left panel.
 pub fn counts(d: &LibData) -> Value {
     let mut c: HashMap<&str, i64> = HashMap::new();
+    let mut series_names: HashSet<&str> = HashSet::new();
     for f in d.files.values() {
         if f.missing {
             continue;
+        }
+        if f.isdir && f.ctype == "series" && !series_names.insert(f.name.as_str()) {
+            continue; // another folder of a series already counted
         }
         if !f.ctype.is_empty() {
             *c.entry(f.ctype.as_str()).or_default() += 1;
@@ -371,19 +444,40 @@ pub fn counts(d: &LibData) -> Value {
 /// A series (or story) page: the item itself and the scenes / stories directly inside it, in name order.
 pub fn children(lib: &Library, path: &str) -> ApiResult<Value> {
     let p = clean_abs(path)?;
-    let (me, recs, mk) = {
+    let (me, roots, recs, mk) = {
         let d = lib.r();
         let me = d.files.get(&file_id(&p)).cloned();
+        // a series made of several same-name folders (on other drives, say) lists what is in all of them
+        let mut roots = vec![p.clone()];
+        roots.extend(d.series_twins(&p).into_iter().filter(|t| exists(t)));
         let mk = Marked::of(&d);
-        let recs: Vec<FileRec> = d.files.values().filter(|f| !f.ctype.is_empty() && !f.missing && under_root(&f.path, &p) && !same_path(&f.path, &p)).cloned().collect();
-        (me, recs, mk)
+        let recs: Vec<FileRec> = d.files.values().filter(|f| !f.ctype.is_empty() && !f.missing && roots.iter().any(|r| under_root(&f.path, r) && !same_path(&f.path, r))).cloned().collect();
+        let roots_recs: Vec<FileRec> = roots.iter().filter_map(|r| d.files.get(&file_id(r)).cloned()).collect();
+        (me, roots_recs, recs, mk)
     };
-    let Some(me) = me.filter(|f| !f.ctype.is_empty()) else { return Err(ApiErr::NotFound("that is not marked as a scene, story or series".into())) };
+    let Some(_) = me.filter(|f| !f.ctype.is_empty()) else { return Err(ApiErr::NotFound("that is not marked as a scene, story or series".into())) };
     let kids = kid_counts(&mk);
-    let mut mine: Vec<FileRec> = recs.into_iter().filter(|f| mk.parent(&f.path).map(|(pp, _)| same_path(&pp, &p)).unwrap_or(false) && exists(&f.path)).collect();
-    mine.sort_by(|a, b| natural_cmp(&lower(&a.path), &lower(&b.path)));
+    let mut mine: Vec<FileRec> = recs
+        .into_iter()
+        .filter(|f| mk.parent(&f.path).map(|(pp, _)| roots.iter().any(|r| same_path(&pp, &r.path))).unwrap_or(false) && exists(&f.path))
+        .collect();
+    // in name order across all the folders (paths differ from drive to drive)
+    mine.sort_by(|a, b| natural_cmp(&lower(&display_name(a)), &lower(&display_name(b))).then_with(|| natural_cmp(&lower(&a.path), &lower(&b.path))));
     let items: Vec<Value> = mine.iter().map(|f| item_json(lib, f, &mk, &kids, false)).collect();
-    Ok(json!({"item": item_json(lib, &me, &mk, &kids, false), "items": items}))
+    let mut me_items: Vec<Value> = roots.iter().map(|f| item_json(lib, f, &mk, &kids, false)).collect();
+    // the folder you opened first, then the others
+    if let Some(i) = me_items.iter().position(|x| x["p"].as_str().map(|s| same_path(s, &p)).unwrap_or(false)) {
+        let m = me_items.remove(i);
+        me_items.insert(0, m);
+    }
+    let item = join_series(me_items).into_iter().next().unwrap_or(Value::Null);
+    Ok(json!({"item": item, "items": items}))
+}
+
+/// The other folders of a series (same name, also marked Series).
+pub fn twins(lib: &Library, path: &str) -> ApiResult<Value> {
+    let p = clean_abs(path)?;
+    Ok(json!({"paths": lib.r().series_twins(&p)}))
 }
 
 fn exists(p: &str) -> bool {

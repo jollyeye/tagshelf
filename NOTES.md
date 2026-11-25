@@ -49,3 +49,4 @@ Windows: %AppData%\TagShelf (library.json, thumbs\, vectors.bin). Recycle Bin vi
 - Tags never flow down the tree: a tag on a series folder is only on that folder.
 - Tag page tabs can be content-type tabs (PageTab.ctype). Chosen previews for marked single files reuse the folder covers map.
 - web/ctypes.js (marks, menus, finder dialog), web/player.js (continuous slideshow, hover previews, chapters), Shelf pages in web/shelf.js (shelfType, openItemPage, itemTile).
+- Series folders with exactly the same name (case-sensitive) are one series (`LibData::series_twins`): lists join them (`join_series`, item.paths), the series page lists children of all of them, and tags are kept identical (tag_paths/set_exact_tags expand to twins; marking a folder as series unions the tags).
