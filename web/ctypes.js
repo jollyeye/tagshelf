@@ -7,9 +7,10 @@ const CT = {
   scene: { label: 'Scene', many: 'Scenes', icon: 'film', color: '#1fb39d', help: 'A few actions in one place and time: a folder of panels or one file.' },
   story: { label: 'Story', many: 'Stories', icon: 'book', color: '#e3972b', help: 'Scenes that make a full story: a folder or one file.' },
   series: { label: 'Series', many: 'Series', icon: 'stack', color: '#a479ff', help: 'Stories (or scenes) that belong together: usually a folder.' },
+  game: { label: 'Game', many: 'Games', icon: 'gamepad', color: '#e5484d', help: 'A game: a folder (its program or index.html starts) or a single file.' },
 };
-const CT_ORDER = ['panel', 'scene', 'story', 'series'];
-const CT_MARKS = ['scene', 'story', 'series'];
+const CT_ORDER = ['panel', 'scene', 'story', 'series', 'game'];
+const CT_MARKS = ['scene', 'story', 'series', 'game'];
 
 // what an entry is: its mark, else Panel for pictures and videos
 function ctypeOf(e) { return e.c || (!e.d && (e.k === 'image' || e.k === 'video') ? 'panel' : ''); }
@@ -77,6 +78,8 @@ function ctypeMenuItems(es, x, y) {
     { label: 'Content type…', icon: 'film', fn: () => ctypeMenu(x, y, es) },
     one && canPlay(one) ? { label: 'Play ' + CT[one.c].label.toLowerCase(), icon: 'play', fn: () => openPlayer(one.p) } : null,
     one && one.c === 'series' ? { label: 'Open series page', icon: 'stack', fn: () => openItemPage(one.p) } : null,
+    one && one.c === 'game' ? { label: 'Launch game', icon: 'play', fn: () => launchGame(one) } : null,
+    one && one.c === 'game' && one.d ? { label: 'Choose what to launch…', icon: 'gamepad', fn: () => chooseGameProgram(one) } : null,
     one && one.c && !one.d ? { label: 'Choose preview…', icon: 'image', fn: () => openItemCoverPicker(one) } : null,
     one && one.c && !one.d ? { label: 'Automatic preview', icon: 'refresh', fn: () => setItemCover(one.p, '') } : null,
     media.length && media.length === es.length ? (media.every((e) => e.np)
@@ -170,4 +173,37 @@ async function useFrameAsPreview(video, target, name) {
   if (typeof COVERS !== 'undefined') COVERS.delete(target);
   toast(`This frame is now the preview of “${name}”`);
   if (S.mode === 'shelf') shelfRefreshSoon(); else SH.home = null;
+}
+
+// ---------------------------------------------------------------- games
+// A folder starts its program (the likely one; when that is unclear you pick, and it is remembered),
+// else its index.html, else Windows opens the folder. A single file is opened the way Windows would.
+async function launchGame(it, opt = {}) {
+  let r;
+  try { r = await api('/api/game/launch', { Path: it.p, Rel: opt.rel || '', Remember: !!opt.remember }); } catch (e) { fail(e); return; }
+  if (r.ask) { chooseGameProgram(it, r); return; }
+  const name = it.n || baseName(it.p);
+  toast(r.folder ? `“${name}” has no program or index.html - opened its folder` : `Starting “${baseName(r.launched)}”…`);
+}
+
+async function chooseGameProgram(it, given) {
+  let r = given;
+  if (!r) { try { r = await api('/api/game/options', { Path: it.p }); } catch (e) { fail(e); return; } }
+  const items = r.items || [];
+  if (!items.length) { toast(r.html ? 'This game has no program: it starts its ' + r.html : 'There is no program (.exe) in this folder'); return; }
+  let pick = r.chosen && items.some((x) => x.rel === r.chosen) ? r.chosen : r.best;
+  let remember = true;
+  const list = h('div', { class: 'gpick' });
+  const draw = () => list.replaceChildren(...items.map((x) => h('label', { class: 'gprow' + (x.notGame ? ' notgame' : '') + (x.rel === pick ? ' on' : '') },
+    h('input', { type: 'radio', name: 'gp', checked: x.rel === pick, onchange: () => { pick = x.rel; draw(); } }),
+    icon('gamepad', 15),
+    h('span', { class: 'gpn' }, h('b', {}, baseName(x.rel)), x.rel.includes('\\') || x.rel.includes('/') ? h('em', {}, dirOf(x.rel)) : null),
+    x.notGame ? h('span', { class: 'muted' }, 'probably not the game') : null,
+    x.rel === r.best && !r.ask ? h('span', { class: 'gpbest' }, 'likely') : null,
+    h('span', { class: 'muted gps' }, fmtSize(x.size)))));
+  draw();
+  const name = it.n || baseName(it.p);
+  modal(`What starts “${name}”?`, h('div', {}, h('p', { class: 'hint', style: { marginTop: 0 } }, given ? 'This folder has several programs and it isn\'t clear which one is the game.' : 'Pick the program that starts the game.'), list,
+    h('label', { class: 'gprem' }, h('input', { type: 'checkbox', checked: true, onchange: (e) => { remember = e.target.checked; } }), 'Always start this one (change it later with right-click → Choose what to launch)')),
+  [{ label: 'Cancel' }, { label: 'Launch', primary: true, fn: () => launchGame(it, { rel: pick, remember }) }], { wide: true });
 }

@@ -405,7 +405,7 @@ pub fn tab_add(lib: &'static Library, name: &str, cat: &str, label: &str, ctype:
     with_tag(lib, name, |info, cats| {
         if !ctype.is_empty() {
             let t = lower(ctype);
-            let nice = match t.as_str() { "panel" => "Panels", "scene" => "Scenes", "story" => "Stories", "series" => "Series", _ => return bad("unknown content type") };
+            let nice = match t.as_str() { "panel" => "Panels", "scene" => "Scenes", "story" => "Stories", "series" => "Series", "game" => "Games", _ => return bad("unknown content type") };
             let id = rand_hex(3);
             let label = clean_tag(label);
             info.tabs.push(crate::store::PageTab { id: id.clone(), label: if label.is_empty() { nice.into() } else { label }, ctype: t, ..Default::default() });

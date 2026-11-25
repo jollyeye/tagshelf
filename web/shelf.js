@@ -944,7 +944,8 @@ async function openItemPage(path, opt = {}) {
 function itemSub(it) {
   const parts = [];
   const n = (k, one, many) => (k ? `${k} ${k === 1 ? one : many}` : null);
-  if (it.c === 'series') parts.push(n(it.stories, 'story', 'stories'), n(it.scenes, 'scene', 'scenes'));
+  if (it.c === 'game') parts.push(it.d ? 'folder' : null);
+  else if (it.c === 'series') parts.push(n(it.stories, 'story', 'stories'), n(it.scenes, 'scene', 'scenes'));
   else if (it.c === 'story') parts.push(n(it.scenes, 'scene', 'scenes'), n(it.media, 'panel', 'panels'));
   else parts.push(n(it.media, 'panel', 'panels'));
   if (!it.d) parts.push((it.x || '').replace('.', '').toUpperCase() + ' file');
@@ -954,6 +955,7 @@ function itemSub(it) {
 
 // open a scene / story / series the way it works best
 function openItem(it) {
+  if (it.c === 'game') { launchGame(it); return; }
   if (it.c === 'series') { if (it.d) openItemPage(it.p); else api('/api/open', { Path: it.p }).catch(fail); return; }
   if (it.d || it.k === 'image' || it.k === 'video') openPlayer(it.p);
   else api('/api/open', { Path: it.p }).catch(fail); // a PDF, an HTML page...: its own app
@@ -962,7 +964,8 @@ function openItem(it) {
 function itemMenu(x, y, it) {
   const e = { p: it.p, d: it.d, c: it.c, k: it.k, x: it.x, n: it.n, t: it.t };
   menu(x, y, [
-    { label: it.c === 'series' ? 'Open' : (it.d || it.k === 'image' || it.k === 'video') ? 'Play' : 'Open', icon: it.c === 'series' ? 'stack' : 'play', fn: () => openItem(it) },
+    { label: it.c === 'game' ? 'Launch' : it.c === 'series' ? 'Open' : (it.d || it.k === 'image' || it.k === 'video') ? 'Play' : 'Open', icon: it.c === 'series' ? 'stack' : 'play', fn: () => openItem(it) },
+    it.c === 'game' && it.d ? { label: 'Choose what to launch…', icon: 'gamepad', fn: () => chooseGameProgram(it) } : null,
     it.d && it.c === 'story' ? { label: 'Open story page', icon: 'book', fn: () => openItemPage(it.p) } : null,
     it.parent ? { label: 'Go to ' + CT[it.parent.c].label.toLowerCase() + ' “' + it.parent.n + '”', icon: CT[it.parent.c].icon, fn: () => openItemPage(it.parent.p) } : null,
     '-',
@@ -981,7 +984,7 @@ function itemTile(it, look, opt = {}) {
   const c = CT[it.c] || CT.scene;
   const pic = it.cover ? coverCell({ ...it.cover, big: (S.shelfSize || 190) * (window.devicePixelRatio || 1) > 300 }, it.cover.k === 'video')
     : h('div', { class: 'cc' }, h('div', { class: 'cc-ico' }, icon(it.d ? c.icon : 'file', 34), it.d ? null : h('em', {}, (it.x || '').replace('.', '').toUpperCase())));
-  const playable = it.c !== 'series' && (it.d || it.k === 'image' || it.k === 'video');
+  const playable = it.c === 'game' || (it.c !== 'series' && (it.d || it.k === 'image' || it.k === 'video'));
   const tile = h('div', { class: 'stile itile ct-' + it.c + (it.d ? ' stack' : ''), style: { '--ct': c.color }, title: it.n, dataset: { p: it.p, ct: it.c },
     onclick: () => openItem(it), oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); itemMenu(e.clientX, e.clientY, it); } },
     pic,
@@ -1019,7 +1022,7 @@ function itemsGrid(list, look, opt = {}) {
 }
 
 // the default tile shape per type (until you pick another)
-const CT_SHAPE = { scene: 'land', story: 'port', series: 'port', panel: 'sq' };
+const CT_SHAPE = { scene: 'land', story: 'port', series: 'port', panel: 'sq', game: 'port' };
 function typeLookKey(c) { return 'type:' + c; }
 
 // a list of panels or of marked items with the usual bar (search, tag filter, order, layout, size)

@@ -48,6 +48,9 @@ pub struct FileRec {
     /// left out when its scene or story plays
     #[serde(skip_serializing_if = "is_false")]
     pub noplay: bool,
+    /// a game folder: the program to start, relative to the folder (your choice)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub launch: String,
     #[serde(skip)]
     pub missing: bool,
 }

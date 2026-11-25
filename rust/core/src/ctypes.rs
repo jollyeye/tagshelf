@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-pub const TYPES: [&str; 3] = ["scene", "story", "series"];
+pub const TYPES: [&str; 4] = ["scene", "story", "series", "game"];
 
 fn valid(t: &str) -> bool {
     t.is_empty() || TYPES.contains(&t)
@@ -438,7 +438,7 @@ pub fn counts(d: &LibData) -> Value {
             *c.entry("panel").or_default() += 1;
         }
     }
-    json!({"panel": c.get("panel").unwrap_or(&0), "scene": c.get("scene").unwrap_or(&0), "story": c.get("story").unwrap_or(&0), "series": c.get("series").unwrap_or(&0)})
+    json!({"panel": c.get("panel").unwrap_or(&0), "scene": c.get("scene").unwrap_or(&0), "story": c.get("story").unwrap_or(&0), "series": c.get("series").unwrap_or(&0), "game": c.get("game").unwrap_or(&0)})
 }
 
 /// A series (or story) page: the item itself and the scenes / stories directly inside it, in name order.
@@ -593,4 +593,146 @@ pub fn durations(args: &Args) {
         }
         crate::dims::save_soon();
     }
+}
+
+// ---------- games ----------
+// A game is a file (started as Windows would) or a folder: its program, else its index.html, else the
+// folder itself. When a folder has several programs (uninstallers, 32/64-bit, setup...), the likely one
+// is picked; when it is not clear you choose, and the choice is remembered.
+
+/// Names of programs that are not the game itself.
+const NOT_THE_GAME: [&str; 22] = [
+    "unins", "uninstall", "setup", "install", "redist", "vcredist", "vc_redist", "dxsetup", "directx", "crash", "report", "updat", "patch",
+    "dotnet", "physx", "prereq", "helper", "cleanup", "repair", "touchup", "activation", "dxwebsetup",
+];
+/// Subfolders that never hold the game's program.
+const SKIP_DIRS: [&str; 9] = ["redist", "_commonredist", "commonredist", "directx", "__installer", "_redist", "support", "vcredist", "dotnet"];
+
+fn alnum(s: &str) -> String {
+    lower(s).chars().filter(|c| c.is_ascii_alphanumeric()).collect()
+}
+
+struct Exe {
+    rel: String,
+    size: u64,
+    score: i64,
+    not_game: bool,
+}
+
+/// The programs in a game folder (and two levels of subfolders, like bin\x64), most likely first.
+fn game_programs(dir: &str) -> Vec<Exe> {
+    let folder = alnum(&base_name(dir));
+    let mut out: Vec<Exe> = vec![];
+    let mut stack = vec![(dir.to_string(), String::new(), 0usize)];
+    while let Some((d, rel, depth)) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        for de in rd.flatten() {
+            let name = de.file_name().to_string_lossy().into_owned();
+            let Ok(md) = de.metadata() else { continue };
+            let r = if rel.is_empty() { name.clone() } else { format!("{rel}{}{name}", std::path::MAIN_SEPARATOR) };
+            if md.is_dir() {
+                if depth < 2 && !SKIP_DIRS.contains(&lower(&name).as_str()) && out.len() < 300 {
+                    stack.push((join(&d, &name), r, depth + 1));
+                }
+                continue;
+            }
+            if lower_ext(&name) != ".exe" {
+                continue;
+            }
+            let stem = alnum(&stem(&name));
+            let ln = lower(&name);
+            let not_game = NOT_THE_GAME.iter().any(|w| ln.contains(w));
+            let mut score: i64 = if not_game { -100 } else { 0 };
+            if !folder.is_empty() && stem == folder {
+                score += 50;
+            } else if !folder.is_empty() && stem.len() >= 3 && (folder.contains(&stem) || stem.contains(&folder)) {
+                score += 25;
+            }
+            if ln.contains("x64") || ln.contains("win64") || ln.contains("64bit") || ln.contains("64-bit") || stem.ends_with("64") {
+                score += 10;
+            }
+            if ln.contains("x86") || ln.contains("win32") || ln.contains("32bit") || ln.contains("32-bit") || stem.ends_with("32") {
+                score -= 10;
+            }
+            if lower(&r).contains("x64") || lower(&r).contains("win64") {
+                score += 5;
+            }
+            score += 6 - 3 * depth as i64; // closer to the top is more likely
+            let mb = (md.len() / (1 << 20)).max(1);
+            score += (64 - mb.leading_zeros() as i64).min(10); // bigger is more likely (log2 of MB)
+            out.push(Exe { rel: r, size: md.len(), score, not_game });
+        }
+    }
+    out.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| natural_cmp(&lower(&a.rel), &lower(&b.rel))));
+    out
+}
+
+/// The top-level index.html, if any.
+fn index_html(dir: &str) -> Option<String> {
+    std::fs::read_dir(dir).ok()?.flatten().map(|de| de.file_name().to_string_lossy().into_owned()).find(|n| lower(n) == "index.html" || lower(n) == "index.htm")
+}
+
+/// What a game folder can start: its programs (likely first), your choice, the guess and its index.html.
+pub fn game_options(lib: &Library, path: &str) -> ApiResult<Value> {
+    let p = clean_abs(path)?;
+    let chosen = lib.lookup(&p).map(|f| f.launch).unwrap_or_default();
+    let exes = game_programs(&p);
+    let items: Vec<Value> = exes.iter().map(|e| json!({"rel": e.rel, "size": e.size, "notGame": e.not_game})).collect();
+    Ok(json!({"items": items, "best": exes.first().map(|e| e.rel.clone()), "chosen": chosen, "html": index_html(&p)}))
+}
+
+/// Starts a game. With `rel` (one of its programs) that one, remembered when asked; otherwise your earlier
+/// choice, the clear favourite, its index.html or the folder. When several programs are equally likely
+/// the answer asks which one ({"ask": true, ...}).
+pub fn game_launch(lib: &'static Library, path: &str, rel: &str, remember: bool) -> ApiResult<Value> {
+    let p = clean_abs(path)?;
+    let md = std::fs::metadata(&p).map_err(|_| ApiErr::NotFound("this game is not there any more (is its drive connected?)".into()))?;
+    if !md.is_dir() {
+        crate::platform::launch(&p)?;
+        return Ok(json!({"launched": p}));
+    }
+    let start = |target: &str| -> ApiResult<Value> {
+        crate::platform::launch(target)?;
+        Ok(json!({"launched": target}))
+    };
+    let resolve = |r: &str| -> Option<String> {
+        if r.is_empty() || r.contains("..") {
+            return None;
+        }
+        let t = join(&p, r);
+        std::fs::metadata(&t).ok().filter(|m| m.is_file()).map(|_| t)
+    };
+    if !rel.is_empty() {
+        let Some(t) = resolve(rel) else { return bad("that program is not in the game's folder") };
+        if remember {
+            let mut d = lib.w();
+            if d.ensure(&p).is_ok() {
+                if let Some(f) = d.files.get_mut(&file_id(&p)) {
+                    f.launch = rel.to_string();
+                }
+                lib.touch(&mut d);
+            }
+        }
+        return start(&t);
+    }
+    if let Some(t) = lib.lookup(&p).map(|f| f.launch).and_then(|r| resolve(&r)) {
+        return start(&t);
+    }
+    let exes = game_programs(&p);
+    let real: Vec<&Exe> = exes.iter().filter(|e| !e.not_game).collect();
+    match real.len() {
+        0 if exes.is_empty() => {}
+        1 => return start(&join(&p, &real[0].rel)),
+        n if n > 1 && real[0].score - real[1].score >= 20 => return start(&join(&p, &real[0].rel)),
+        _ => {
+            let items: Vec<Value> = exes.iter().map(|e| json!({"rel": e.rel, "size": e.size, "notGame": e.not_game})).collect();
+            return Ok(json!({"ask": true, "items": items, "best": exes[0].rel}));
+        }
+    }
+    if let Some(h) = index_html(&p) {
+        return start(&join(&p, &h));
+    }
+    // nothing we know: let Windows decide (opens the folder)
+    crate::platform::launch(&p)?;
+    Ok(json!({"launched": p, "folder": true}))
 }

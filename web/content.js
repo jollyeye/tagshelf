@@ -363,6 +363,7 @@ function typeAhead(ch) {
 function openEntry(e) {
   if (e.d) { go(e.p); return; }
   if (canPlay(e)) { openPlayer(e.p); return; }
+  if (e.c === 'game') { launchGame(e); return; }
   if (S.dbl === 'viewer' && (e.k === 'image' || e.k === 'video' || e.k === 'audio')) { openViewer(e.p); return; }
   api('/api/open', { Path: e.p }).catch(fail);
 }

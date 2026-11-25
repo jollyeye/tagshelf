@@ -688,3 +688,16 @@ body:has(#player) #toast { bottom: 120px; pointer-events: none; }
 .pltip.stripmode .pltipic { display: none; }
 .pltip.stripmode { bottom: 22px; z-index: 5; }
 .plpp * { pointer-events: none; }
+/* game: which program starts it */
+.gpick { max-height: 50vh; overflow: auto; border: 1px solid var(--line); border-radius: 9px; }
+.gprow { display: flex; align-items: center; gap: 10px; padding: 8px 11px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.gprow:last-child { border-bottom: 0; }
+.gprow.on { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.gprow.notgame { opacity: .6; }
+.gpn { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gpn b, .gpn em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gpn em { font-style: normal; font-size: 11.5px; color: var(--muted); }
+.gpbest { font-size: 11px; font-weight: 600; color: #fff; background: #e5484d; border-radius: 999px; padding: 1px 7px; }
+.gps { font-variant-numeric: tabular-nums; }
+.gprem { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; }
+.tile.ct-game { --ct: #e5484d; }

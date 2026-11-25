@@ -212,6 +212,19 @@ fn reveal_in_explorer(path: &str) -> bool {
     .unwrap_or(false)
 }
 
+/// Starts a program (or opens a file) the way a double-click does, with the program's own folder as
+/// the working folder - games look for their files next to themselves.
+pub fn launch(path: &str) -> ApiResult<()> {
+    let (verb, file, dir) = (wide("open"), wide(path), wide(&dir_name(path)));
+    claim_foreground();
+    let r = unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), file.as_ptr(), std::ptr::null(), dir.as_ptr(), 1) };
+    if r > 32 {
+        Ok(())
+    } else {
+        Err(ApiErr::Bad(format!("Windows could not start {} (error {r})", base_name(path))))
+    }
+}
+
 pub fn open_path(path: &str, reveal: bool) -> ApiResult<()> {
     let is_dir = std::fs::metadata(path).map(|m| m.is_dir()).unwrap_or(false);
     if reveal && !is_dir && reveal_in_explorer(path) {

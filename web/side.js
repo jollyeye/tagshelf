@@ -86,6 +86,7 @@ function tagsTab() {
     kids.push(h('div', { class: 'ctrow' }, h('span', { class: 'muted' }, 'Content'), val && val !== '*' ? ctBadge(val, { small: true }) : null, sel,
       playable ? h('button', { class: 'btn small', onclick: () => openPlayer(one.p) }, icon('play', 13), 'Play') : null,
       one && one.c === 'series' ? h('button', { class: 'btn small', onclick: () => openItemPage(one.p) }, icon('stack', 13), 'Open') : null,
+      one && one.c === 'game' ? h('button', { class: 'btn small', onclick: () => launchGame(one) }, icon('play', 13), 'Launch') : null,
       es.some((e) => e.np) ? h('span', { class: 'muted', title: 'Left out when its scene or story plays' }, '· left out of playback') : null));
     if (one && one.d && one.c === 'series') {
       const box = h('div', { class: 'twins' });

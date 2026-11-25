@@ -17,6 +17,15 @@ pub fn trash_paths(data_dir: &str, paths: &[String]) -> ApiResult<()> {
     crate::fsops::trash_fallback(data_dir, paths)
 }
 
+/// Starts a program or opens a file (tests only log it).
+pub fn launch(path: &str) -> ApiResult<()> {
+    if std::env::var("TAGSHELF_DEBUG").is_ok() {
+        eprintln!("LAUNCH {path}");
+        return Ok(());
+    }
+    open_path(path, false)
+}
+
 pub fn open_path(path: &str, reveal: bool) -> ApiResult<()> {
     let is_dir = std::fs::metadata(path).map(|m| m.is_dir()).unwrap_or(false);
     let (cmd, target) = if cfg!(target_os = "macos") {
