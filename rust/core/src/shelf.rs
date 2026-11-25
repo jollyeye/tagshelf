@@ -54,14 +54,15 @@ fn cards(d: &LibData) -> HashMap<String, TagCard> {
     let mut counts: HashMap<&str, i64> = HashMap::new();
     let mut last: HashMap<&str, i64> = HashMap::new();
     for f in d.files.values() {
-        if f.missing || f.isdir {
+        if f.missing {
             continue;
         }
-        let rank = match f.kind.as_str() {
+        // folders count too (a tag only on a scene folder still gets its card); their picture comes from files
+        let rank = if f.isdir { 0 } else { match f.kind.as_str() {
             "image" => 2,
             "video" => 1,
             _ => 0,
-        };
+        } };
         for t in &f.tags {
             *counts.entry(t.as_str()).or_default() += 1;
             let l = last.entry(t.as_str()).or_default();

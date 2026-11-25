@@ -30,6 +30,9 @@ async function setMode(m, opt = {}) {
     closeMenu();
     renderNav();
     if (opt.tag) { await openTagPage(opt.tag, { push: changed || SH.view !== 'tag' }); refreshHomeQuiet(); }
+    else if (changed && SH.view === 'tag' && SH.tag) { await openTagPage(SH.tag, { push: false, keepTab: true }); refreshHomeQuiet(); }
+    else if (SH.view === 'type' && SH.ctype) { await shelfType(SH.ctype, { push: false }); refreshHomeQuiet(); }
+    else if (SH.view === 'item' && SH.item) { await openItemPage(SH.item, { push: false }); refreshHomeQuiet(); }
     else await shelfLoad(SH.view === 'home' || !SH.home);
   } else {
     renderNav();

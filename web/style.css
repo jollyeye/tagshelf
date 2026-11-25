@@ -670,3 +670,6 @@ body:has(#player) #toast { bottom: 120px; pointer-events: none; }
 .twins { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
 .twins:empty { display: none; }
 .twins .twin { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the player's menus: dark like the player (the option list is drawn by Windows) */
+#player select, #player select option { background: #1c2029; color: #eef0f5; }
+#player select:focus { outline: 1px solid var(--accent); }
