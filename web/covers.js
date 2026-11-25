@@ -17,7 +17,7 @@ const coverObs = new IntersectionObserver((es) => {
 }, { rootMargin: '300px' });
 
 function coverWatch(el, e) {
-  if (!e.d || S.folderPrev === 'off') return;
+  if (!(e.d || e.c) || S.folderPrev === 'off') return;
   const c = COVERS.get(e.p);
   if (c && c.m === e.m) { queueMicrotask(() => paintCover(el, c.info)); return; }
   coverObs.observe(el);

@@ -82,5 +82,56 @@ pub fn save_soon() {
         std::thread::sleep(std::time::Duration::from_secs(5));
         SAVING.store(false, Ordering::SeqCst);
         save();
+        save_durations();
     });
+}
+
+// ---------- video lengths (for the scene / story player's total time) ----------
+// The page measures a video once (from its metadata) and tells us; remembered in <data>/durations.json.
+
+#[derive(Default)]
+struct Durs {
+    file: String,
+    /// path -> [mtime, size, milliseconds]
+    map: HashMap<String, [i64; 3]>,
+    dirty: bool,
+}
+static T: Mutex<Option<Durs>> = Mutex::new(None);
+
+pub fn open_durations(data_dir: &str) {
+    let file = join(data_dir, "durations.json");
+    let map = std::fs::read(&file).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    *T.lock().unwrap() = Some(Durs { file, map, dirty: false });
+}
+
+pub fn duration(p: &str, mtime: i64, size: i64) -> Option<i64> {
+    let g = T.lock().unwrap();
+    let v = g.as_ref()?.map.get(p)?;
+    (v[0] == mtime && v[1] == size && v[2] > 0).then_some(v[2])
+}
+
+pub fn put_duration(p: &str, mtime: i64, size: i64, ms: i64) {
+    if ms <= 0 || ms > 1000 * 3600 * 48 {
+        return;
+    }
+    if let Some(d) = T.lock().unwrap().as_mut() {
+        d.map.insert(p.to_string(), [mtime, size, ms]);
+        d.dirty = true;
+    }
+}
+
+pub fn save_durations() {
+    let (file, data) = {
+        let mut g = T.lock().unwrap();
+        let Some(d) = g.as_mut() else { return };
+        if !d.dirty {
+            return;
+        }
+        d.dirty = false;
+        (d.file.clone(), serde_json::to_vec(&d.map).unwrap_or_default())
+    };
+    let tmp = format!("{file}.tmp");
+    if std::fs::write(&tmp, &data).and_then(|_| std::fs::rename(&tmp, &file)).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
 }

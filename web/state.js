@@ -1,20 +1,20 @@
 'use strict';
 // ---------------------------------------------------------------- state
-const defaultFilter = () => ({ q: '', inc: [], exc: [], any: false, untagged: false, kinds: [], minRating: 0 });
+const defaultFilter = () => ({ q: '', inc: [], exc: [], any: false, untagged: false, kinds: [], ctypes: [], minRating: 0 });
 const S = {
   path: '', parent: '', hist: [], hi: -1, entries: [], vis: [], byPath: new Map(), truncated: false, loading: false, error: '', navSeq: 0,
   sub: false, hidden: false,
   sel: new Set(), anchor: null,
   f: defaultFilter(),
   sort: 'name', desc: false, group: 'none', folderPrev: 'mosaic', dirsFirst: true, view: 'grid', size: 190, fit: 'cover', theme: 'dark',
-  mode: 'files', categories: [], shelfSize: 190, cardSize: 180, pageLayouts: {}, tabSort: 'shared', tabSortOnly: 'list', tabDesc: true, pageSort: 'added', pageDesc: true, catSort: 'count', catDesc: true,
+  mode: 'files', categories: [], shelfSize: 190, cardSize: 180, pageLayouts: {}, imgSecs: 4, tabSort: 'shared', tabSortOnly: 'list', tabDesc: true, pageSort: 'added', pageDesc: true, catSort: 'count', catDesc: true,
   dbl: 'system', tagShow: 'names', ai: true, confirmDelete: true, welcomed: false, bgAsked: false, lastPath: '', navw: 270, sidew: 340,
   tags: [], tagMap: {}, pins: [], views: [], prefs: {}, locs: { quick: [], drives: [] }, recent: [], missing: 0,
   os: '', sep: '\\', home: '', downloads: '', autostart: false, vectors: 0,
   clip: null, undo: [], tagClip: [], rightTab: 'tags', pending: 0,
 };
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-const SAVED = ['mode', 'shelfSize', 'cardSize', 'pageLayouts', 'tabSort', 'tabSortOnly', 'tabDesc', 'pageSort', 'pageDesc', 'catSort', 'catDesc', 'folderPrev', 'group', 'view', 'size', 'fit', 'theme', 'sort', 'desc', 'dirsFirst', 'dbl', 'tagShow', 'ai', 'confirmDelete', 'hidden', 'welcomed', 'bgAsked', 'lastPath', 'navw', 'sidew', 'rightTab'];
+const SAVED = ['mode', 'shelfSize', 'cardSize', 'pageLayouts', 'imgSecs', 'tabSort', 'tabSortOnly', 'tabDesc', 'pageSort', 'pageDesc', 'catSort', 'catDesc', 'folderPrev', 'group', 'view', 'size', 'fit', 'theme', 'sort', 'desc', 'dirsFirst', 'dbl', 'tagShow', 'ai', 'confirmDelete', 'hidden', 'welcomed', 'bgAsked', 'lastPath', 'navw', 'sidew', 'rightTab'];
 const saveSettingsSoon = debounce(() => {
   const o = {}; for (const k of SAVED) o[k] = S[k];
   api('/api/settings', o).catch(() => {});
@@ -47,7 +47,7 @@ function applyLook() {
 }
 
 // ---------------------------------------------------------------- filtering & sorting
-function filterActive() { const f = S.f; return !!(f.q || f.inc.length || f.exc.length || f.untagged || f.kinds.length || f.minRating); }
+function filterActive() { const f = S.f; return !!(f.q || f.inc.length || f.exc.length || f.untagged || f.kinds.length || (f.ctypes || []).length || f.minRating); }
 function passes(e) {
   const f = S.f, t = e.t || [];
   if (f.q) {
@@ -55,6 +55,7 @@ function passes(e) {
     if (!(e.n.toLowerCase().includes(q) || (e.rel || '').toLowerCase().includes(q) || t.some((x) => x.toLowerCase().includes(q)))) return false;
   }
   if (f.kinds.length && !f.kinds.includes(e.d ? 'folder' : e.k)) return false;
+  if ((f.ctypes || []).length && !f.ctypes.includes(ctypeOf(e))) return false;
   if (f.minRating && (e.r || 0) < f.minRating) return false;
   if (f.untagged && t.length) return false;
   for (const x of f.exc) if (t.includes(x)) return false;

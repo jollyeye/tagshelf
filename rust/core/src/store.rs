@@ -42,8 +42,21 @@ pub struct FileRec {
     pub rating: i64,
     #[serde(skip_serializing_if = "is_false")]
     pub isdir: bool,
+    /// content type set by the user: "scene", "story" or "series" ("" = none; images and videos are panels)
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub ctype: String,
+    /// left out when its scene or story plays
+    #[serde(skip_serializing_if = "is_false")]
+    pub noplay: bool,
     #[serde(skip)]
     pub missing: bool,
+}
+
+impl FileRec {
+    /// Whether the library still needs to remember this file.
+    pub fn keep(&self) -> bool {
+        !self.tags.is_empty() || self.rating != 0 || !self.ctype.is_empty() || self.noplay
+    }
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -83,6 +96,9 @@ pub struct PageTab {
     pub only: Vec<String>,
     #[serde(alias = "hidden", deserialize_with = "nullable")]
     pub exclude: Vec<String>,
+    /// a content-type tab instead ("panel", "scene", "story", "series"): lists what carries the page's tag
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub ctype: String,
 }
 
 /// A Shelf category ("Topics", "Characters", ...) with its layout preset.
@@ -230,7 +246,7 @@ impl LibData {
         name
     }
 
-    fn ensure(&mut self, path: &str) -> std::io::Result<&mut FileRec> {
+    pub fn ensure(&mut self, path: &str) -> std::io::Result<&mut FileRec> {
         let id = file_id(path);
         if !self.files.contains_key(&id) {
             let md = std::fs::metadata(path)?;
@@ -359,6 +375,8 @@ impl Library {
                 if let Some(f) = d.files.get(&file_id(&e.p)) {
                     e.t = f.tags.clone();
                     e.r = f.rating;
+                    e.c = f.ctype.clone();
+                    e.np = f.noplay;
                 } else if has_orphans && !e.d {
                     cands.push(i);
                 }
@@ -388,6 +406,8 @@ impl Library {
             old.missing = false;
             e.t = old.tags.clone();
             e.r = old.rating;
+            e.c = old.ctype.clone();
+            e.np = old.noplay;
             let nid = old.id.clone();
             d.files.insert(nid.clone(), old);
             relinked += 1;
@@ -566,7 +586,7 @@ impl Library {
             }
             sort_tags(&mut nt);
             f.tags = nt.clone();
-            let drop_it = nt.is_empty() && f.rating == 0;
+            let drop_it = !f.keep();
             out.insert(p.clone(), nt);
             if drop_it {
                 d.files.remove(&id);
@@ -601,7 +621,7 @@ impl Library {
             }
             let f = d.files.get_mut(&id).unwrap();
             f.tags = nt.clone();
-            let drop_it = nt.is_empty() && f.rating == 0;
+            let drop_it = !f.keep();
             out.insert(p.clone(), Some(nt));
             if drop_it {
                 d.files.remove(&id);
@@ -621,7 +641,7 @@ impl Library {
             }
             let f = d.files.get_mut(&id).unwrap();
             f.rating = r;
-            if r == 0 && f.tags.is_empty() {
+            if !f.keep() {
                 d.files.remove(&id);
             }
         }
@@ -713,7 +733,7 @@ impl Library {
         d.files.retain(|_, f| {
             if f.tags.contains(&c) {
                 f.tags.retain(|t| *t != c);
-                return !(f.tags.is_empty() && f.rating == 0);
+                return f.keep();
             }
             true
         });

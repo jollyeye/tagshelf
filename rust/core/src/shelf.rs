@@ -43,7 +43,7 @@ fn chosen_pic(path: &str) -> Option<Pic> {
     std::fs::metadata(path).ok().filter(|m| !m.is_dir()).map(|m| pic_of(path, mtime_unix(&m)))
 }
 
-fn pic_of(path: &str, mtime: i64) -> Pic {
+pub fn pic_of(path: &str, mtime: i64) -> Pic {
     let x = lower_ext(path);
     Pic { k: kind_of(&x).into(), p: path.into(), x, m: mtime }
 }
@@ -130,7 +130,7 @@ pub fn home(lib: &Library) -> Value {
         .collect();
     recent.sort_by(|a, b| b.0.cmp(a.0));
     let recent: Vec<Pic> = recent.into_iter().take(24).map(|x| x.1).collect();
-    json!({"categories": cats, "uncategorized": sorted_cards(loose), "recent": recent})
+    json!({"categories": cats, "uncategorized": sorted_cards(loose), "recent": recent, "types": crate::ctypes::counts(&d)})
 }
 
 #[derive(Serialize)]
@@ -151,6 +151,9 @@ struct PageFile {
     w: u32,
     #[serde(skip_serializing_if = "is_zero_u")]
     h: u32,
+    /// content type when the file is marked as a scene, story or series
+    #[serde(skip_serializing_if = "String::is_empty")]
+    c: String,
 }
 fn is_zero_u(n: &u32) -> bool {
     *n == 0
@@ -169,7 +172,7 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
             .files
             .values()
             .filter(|f| !f.missing && !f.isdir && f.tags.contains(&tag))
-            .map(|f| PageFile { n: f.name.clone(), p: f.path.clone(), k: f.kind.clone(), x: f.ext.clone(), s: f.size, m: f.mtime, t: f.tags.clone(), r: f.rating, a: f.added, w: 0, h: 0 })
+            .map(|f| PageFile { n: f.name.clone(), p: f.path.clone(), k: f.kind.clone(), x: f.ext.clone(), s: f.size, m: f.mtime, t: f.tags.clone(), r: f.rating, a: f.added, w: 0, h: 0, c: f.ctype.clone() })
             .collect();
         (tag, info, files, cards(&d), d.categories.clone())
     };
@@ -228,6 +231,11 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
         .tabs
         .iter()
         .map(|tab| {
+            if !tab.ctype.is_empty() {
+                // a content-type tab: the scenes / stories / series with this tag (panels are filtered on the page)
+                let items = if tab.ctype == "panel" { Value::Array(vec![]) } else { crate::ctypes::with_tag(lib, &tab.ctype, &tag) };
+                return json!({"id": tab.id, "label": tab.label, "ctype": tab.ctype, "items": items});
+            }
             let mut shared: HashMap<&str, i64> = HashMap::new();
             for f in &files {
                 for t in &f.t {
@@ -392,8 +400,16 @@ fn with_tag<R>(lib: &'static Library, name: &str, f: impl FnOnce(&mut crate::sto
     Ok(r)
 }
 
-pub fn tab_add(lib: &'static Library, name: &str, cat: &str, label: &str) -> ApiResult<String> {
+pub fn tab_add(lib: &'static Library, name: &str, cat: &str, label: &str, ctype: &str) -> ApiResult<String> {
     with_tag(lib, name, |info, cats| {
+        if !ctype.is_empty() {
+            let t = lower(ctype);
+            let nice = match t.as_str() { "panel" => "Panels", "scene" => "Scenes", "story" => "Stories", "series" => "Series", _ => return bad("unknown content type") };
+            let id = rand_hex(3);
+            let label = clean_tag(label);
+            info.tabs.push(crate::store::PageTab { id: id.clone(), label: if label.is_empty() { nice.into() } else { label }, ctype: t, ..Default::default() });
+            return Ok(id);
+        }
         let Some(c) = cats.iter().find(|c| c.id == cat) else { return bad("no such category") };
         let id = rand_hex(3);
         let label = clean_tag(label);

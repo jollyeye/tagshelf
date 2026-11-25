@@ -121,9 +121,16 @@ pub fn covers(lib: &Library, folders: &[String]) -> serde_json::Value {
     serde_json::json!({ "covers": out.into_inner().unwrap() })
 }
 
+/// A folder's preview (the picture you chose, else up to four from inside it).
+pub fn folder_preview(lib: &Library, folder: &str) -> Option<CoverInfo> {
+    one(lib, folder)
+}
+
 fn one(lib: &Library, raw: &str) -> Option<CoverInfo> {
     let p = clean_abs(raw).ok()?;
-    let md = std::fs::metadata(&p).ok().filter(|m| m.is_dir())?;
+    let md = std::fs::metadata(&p).ok()?;
+    // a file (a scene, story or series in one file) only has a preview when you chose one
+    let custom_only = !md.is_dir();
     if let Some(img) = lib.cover_for(&p) {
         if img == "-" {
             return Some(CoverInfo { items: vec![], n: -1, custom: false, none: true });
@@ -135,6 +142,9 @@ fn one(lib: &Library, raw: &str) -> Option<CoverInfo> {
             }
         }
         // the chosen picture is gone: fall back to automatic
+    }
+    if custom_only {
+        return None;
     }
     let mt = nanos_of(md.modified());
     if let Some((m, info)) = CACHE.lock().unwrap().get(&p) {
@@ -153,8 +163,10 @@ fn one(lib: &Library, raw: &str) -> Option<CoverInfo> {
 
 pub fn set(lib: &'static Library, folder: &str, image: &str) -> ApiResult<()> {
     let folder = clean_abs(folder)?;
-    if !std::fs::metadata(&folder).map(|m| m.is_dir()).unwrap_or(false) {
-        return bad("that folder doesn't exist");
+    let md = std::fs::metadata(&folder).map_err(|_| ApiErr::Bad("that folder doesn't exist".into()))?;
+    // files get a preview only as a scene, story or series (a PDF, an ISO...)
+    if !md.is_dir() && lib.lookup(&folder).map(|f| f.ctype.is_empty()).unwrap_or(true) {
+        return bad("only folders, scenes, stories and series can have a chosen preview");
     }
     let mut img = image.to_string();
     if !img.is_empty() && img != "-" {

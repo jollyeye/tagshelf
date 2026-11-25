@@ -17,7 +17,7 @@ function toggleQuickTag(i) {
   tagPaths(selPaths(), all ? [] : [name], all ? [name] : [], all ? 'remove tag' : 'add tag');
 }
 
-function activeFilterCount() { const f = S.f; return (f.q ? 1 : 0) + f.inc.length + f.exc.length + f.kinds.length + (f.minRating ? 1 : 0) + (f.untagged ? 1 : 0); }
+function activeFilterCount() { const f = S.f; return (f.q ? 1 : 0) + f.inc.length + f.exc.length + f.kinds.length + (f.ctypes || []).length + (f.minRating ? 1 : 0) + (f.untagged ? 1 : 0); }
 
 function renderSide() {
   const side = $('#side');
@@ -72,6 +72,22 @@ function tagsTab() {
   kids.push(h('div', { class: 'card' }, previewBox(es), h('div', { class: 'meta' },
     h('b', { title: one ? one.p : '' }, one ? one.n : `${n} items selected`),
     h('span', {}, one ? (one.d ? 'Folder' : fmtSize(one.s) + ' · ' + typeLabel(one)) : (bytes ? fmtSize(bytes) + ' in total' : 'folders')))));
+
+  // content type (scene / story / series; pictures and videos are panels unless marked)
+  {
+    const cur = new Set(es.map((e) => e.c || ''));
+    const val = cur.size === 1 ? [...cur][0] : '*';
+    const allMedia = es.every((e) => !e.d && (e.k === 'image' || e.k === 'video'));
+    const sel = h('select', { class: 'txt small ctsel', title: 'What this is', onchange: (ev) => { if (ev.target.value !== '*') setCtype(paths, ev.target.value); } },
+      val === '*' ? h('option', { value: '*', selected: true }, 'Mixed') : null,
+      h('option', { value: '', selected: val === '' }, allMedia ? 'Panel' : 'None'),
+      CT_MARKS.map((c) => h('option', { value: c, selected: val === c }, CT[c].label)));
+    const playable = one && canPlay(one);
+    kids.push(h('div', { class: 'ctrow' }, h('span', { class: 'muted' }, 'Content'), val && val !== '*' ? ctBadge(val, { small: true }) : null, sel,
+      playable ? h('button', { class: 'btn small', onclick: () => openPlayer(one.p) }, icon('play', 13), 'Play') : null,
+      one && one.c === 'series' ? h('button', { class: 'btn small', onclick: () => openItemPage(one.p) }, icon('stack', 13), 'Open') : null,
+      es.some((e) => e.np) ? h('span', { class: 'muted', title: 'Left out when its scene or story plays' }, '· left out of playback') : null));
+  }
 
   // current tags
   const chips = h('div', { class: 'chips' });
@@ -234,6 +250,13 @@ function filterTab() {
     } }), l)),
     h('label', {}, 'Minimum rating ', h('select', { class: 'txt', onchange: (e) => { f.minRating = +e.target.value; afterFilterChange(); } },
       [[0, 'any'], [1, '★ 1+'], [2, '★ 2+'], [3, '★ 3+'], [4, '★ 4+'], [5, '★ 5']].map(([v, l]) => h('option', { value: v, selected: f.minRating === v }, l)))))));
+
+  // content type
+  kids.push(h('div', {}, h('div', { class: 'sh' }, h('span', {}, 'Content type'), h('div', { class: 'acts' },
+    h('button', { class: 'btn small', title: 'Mark folders whose names say scene, story or series', onclick: () => openTypeFinder(S.path) }, 'Find by name…'))),
+    h('div', { class: 'checks' }, CT_ORDER.map((c) => h('label', {}, h('input', { type: 'checkbox', checked: (f.ctypes || []).includes(c), onchange: (e) => {
+      f.ctypes = e.target.checked ? [...(f.ctypes || []), c] : (f.ctypes || []).filter((x) => x !== c); afterFilterChange();
+    } }), ctBadge(c, { small: true, panel: true }), CT[c].many)))));
 
   // saved filters
   const views = h('div', { class: 'views' }, S.views.length ? S.views.map((v) => h('div', { class: 'vrow', onclick: () => applyView(v) }, icon('filter', 14), h('span', {}, v.name),

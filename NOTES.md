@@ -42,3 +42,10 @@ Windows: %AppData%\TagShelf (library.json, thumbs\, vectors.bin). Recycle Bin vi
 
 ## Ideas / planned
 - Full rebuild with extra features; the owner may supply a PDF spec (put it in docs/).
+
+## Content types (Rust version)
+- FileRec.ctype = "scene" | "story" | "series" (set on folders or single files); every image/video without a mark is a Panel. FileRec.noplay = left out of playback. A record is kept while it has tags, rating, ctype or noplay (`FileRec::keep`).
+- rust/core/src/ctypes.rs: marking, folder-name detection (`/api/ctype/detect`), Shelf lists (`/api/ctype/page`, `/api/ctype/children`), playlists (`/api/play`: own pictures/videos in natural name order + subfolders marked scene/story as chapters; unmarked subfolders skipped), video lengths (`/api/durations`, cached in durations.json via dims.rs).
+- Tags never flow down the tree: a tag on a series folder is only on that folder.
+- Tag page tabs can be content-type tabs (PageTab.ctype). Chosen previews for marked single files reuse the folder covers map.
+- web/ctypes.js (marks, menus, finder dialog), web/player.js (continuous slideshow, hover previews, chapters), Shelf pages in web/shelf.js (shelfType, openItemPage, itemTile).

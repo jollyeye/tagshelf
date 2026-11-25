@@ -32,6 +32,12 @@ pub struct Entry {
     pub h: bool,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub rel: String,
+    /// content type ("scene", "story", "series")
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub c: String,
+    /// left out of playback
+    #[serde(skip_serializing_if = "is_false")]
+    pub np: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]

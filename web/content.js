@@ -90,6 +90,7 @@ function toolsMenu(x, y) {
     { label: 'Invert selection', key: 'Ctrl+I', fn: invertSel },
     '-',
     { label: 'Suggest tags for the untagged files here…', icon: 'sparkle', fn: () => openReview() },
+    { label: 'Find scenes, stories and series by name…', icon: 'film', fn: () => openTypeFinder(S.path) },
     { label: 'Find duplicate files…', icon: 'copy', fn: () => openDuplicates() },
     { label: 'Batch rename selected…', icon: 'edit', disabled: S.sel.size < 2, fn: () => openBatchRename(selEntries()) },
     { label: 'Undo ' + (S.undo.length ? S.undo[S.undo.length - 1].label : ''), icon: 'undo', key: 'Ctrl+Z', disabled: !S.undo.length, fn: undo },
@@ -110,6 +111,7 @@ function renderFilterbar() {
   for (const t of f.inc) kids.push(chip(t, tagColor(t), '', () => toggleInc(t)));
   for (const t of f.exc) kids.push(chip('not ' + t, tagColor(t), 'not', () => toggleExc(t)));
   for (const k of f.kinds) kids.push(chip(k, null, '', () => { f.kinds = f.kinds.filter((x) => x !== k); afterFilterChange(); }));
+  for (const c of f.ctypes || []) kids.push(chip(CT[c].many.toLowerCase(), CT[c].color, '', () => { f.ctypes = f.ctypes.filter((x) => x !== c); afterFilterChange(); }));
   if (f.minRating) kids.push(chip('★ ' + f.minRating + '+', null, '', () => { f.minRating = 0; afterFilterChange(); }));
   if (f.untagged) kids.push(chip('untagged', null, '', () => { f.untagged = false; afterFilterChange(); }));
   kids.push(h('button', { class: 'btn small', onclick: clearFilters }, 'Clear all'));
@@ -193,14 +195,15 @@ const isCut = (p) => S.clip && S.clip.mode === 'cut' && S.clip.paths.includes(p)
 
 function tileEl(e) {
   const t = tileEl0(e);
-  if (e.d) coverWatch(t, e);
+  if (e.d || e.c) coverWatch(t, e);
   return t;
 }
 function tileEl0(e) {
-  return h('div', { class: 'tile' + (e.d ? ' folder' : '') + (S.sel.has(e.p) ? ' sel' : '') + (isCut(e.p) ? ' cut' : ''), dataset: e.d ? { p: e.p, dir: '1' } : { p: e.p }, draggable: true, title: e.p },
+  return h('div', { class: 'tile' + (e.d ? ' folder' : '') + (e.c ? ' ct ct-' + e.c : '') + (e.np ? ' np' : '') + (S.sel.has(e.p) ? ' sel' : '') + (isCut(e.p) ? ' cut' : ''), dataset: e.d ? { p: e.p, dir: '1' } : { p: e.p }, draggable: true, title: e.p },
     h('div', { class: 'thumb' }, tileMedia(e),
       h('button', { class: 'chk', title: 'Select' }, icon('check', 13)),
-      e.r ? h('span', { class: 'stars' }, '★' + e.r) : null),
+      e.r ? h('span', { class: 'stars' }, '★' + e.r) : null,
+      e.c ? ctBadge(e.c) : null),
     h('div', { class: 'cap' }, h('div', { class: 'nm' }, e.n), e.rel && S.sub ? h('div', { class: 'relp' }, dirOf(e.rel) === e.rel ? '' : dirOf(e.rel)) : null,
       h('div', { class: 'tg' }, tagMinis(e))));
 }
@@ -211,7 +214,7 @@ function rowEl(e) {
 }
 function rowEl0(e) {
   return h('div', { class: 'lrow' + (e.d ? ' folder' : '') + (S.sel.has(e.p) ? ' sel' : '') + (isCut(e.p) ? ' cut' : ''), dataset: e.d ? { p: e.p, dir: '1' } : { p: e.p }, draggable: true, title: e.p },
-    h('div', { class: 'c1' }, icon(entryIcon(e), 16), h('span', {}, e.n)),
+    h('div', { class: 'c1' }, icon(entryIcon(e), 16), h('span', {}, e.n), e.c ? ctBadge(e.c, { small: true }) : null),
     h('div', { class: 'c2' }, tagMinis(e, 4)),
     h('div', { class: 'c3' }, e.d ? '' : fmtSize(e.s)),
     h('div', { class: 'c4' }, fmtDate(e.m)),
@@ -359,6 +362,7 @@ function typeAhead(ch) {
 // ---------------------------------------------------------------- opening
 function openEntry(e) {
   if (e.d) { go(e.p); return; }
+  if (canPlay(e)) { openPlayer(e.p); return; }
   if (S.dbl === 'viewer' && (e.k === 'image' || e.k === 'video' || e.k === 'audio')) { openViewer(e.p); return; }
   api('/api/open', { Path: e.p }).catch(fail);
 }
@@ -481,6 +485,7 @@ function entryMenu(x, y) {
     { label: 'Show in Explorer', icon: 'ext', fn: () => api('/api/open', { Path: (one || es[0]).p, Reveal: true }).catch(fail) },
     '-',
     { label: 'Add tags…', icon: 'tag', fn: () => { setRightTab('tags'); setTimeout(() => { const i = $('#side .tag-in'); if (i) i.focus(); }, 50); } },
+    ...ctypeMenuItems(es, x, y),
     '-',
     { label: 'Cut', icon: 'cut', key: 'Ctrl+X', fn: () => copySel(true) },
     { label: 'Copy', icon: 'copy', key: 'Ctrl+C', fn: () => copySel(false) },
@@ -506,6 +511,7 @@ function emptyMenu(x, y) {
     { label: 'Refresh', icon: 'refresh', key: 'F5', fn: () => refresh() },
     { label: 'Show in Explorer', icon: 'ext', fn: () => api('/api/open', { Path: S.path }).catch(fail) },
     { label: 'Suggest tags for the untagged files here…', icon: 'sparkle', fn: () => openReview() },
+    { label: 'Find scenes, stories and series by name…', icon: 'film', fn: () => openTypeFinder(S.path) },
   ]);
 }
 

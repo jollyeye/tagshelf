@@ -5,7 +5,7 @@ use crate::http::*;
 use crate::store::{Library, Pair};
 use crate::util::*;
 use crate::watch::Watcher;
-use crate::{covers, dups, fsops, platform, shelf, thumbs};
+use crate::{ctypes, covers, dups, fsops, platform, shelf, thumbs};
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
@@ -275,6 +275,17 @@ impl Server {
             }
             // Shelf
             ("GET", "/api/shelf/home") => Ok(shelf::home(self.lib)),
+            // content types: scenes, stories, series
+            ("POST", "/api/ctype/set") => ctypes::set(self.lib, &args.strs("Paths"), &args.str("Type")).map(|m| json!({"types": m})),
+            ("POST", "/api/ctype/noplay") => ctypes::set_noplay(self.lib, &args.strs("Paths"), args.bool("On")).map(|_| ok()),
+            ("POST", "/api/ctype/detect") => ctypes::detect(self.lib, &args.str("Path")),
+            ("POST", "/api/ctype/page") => ctypes::page(self.lib, &args.str("Type")),
+            ("POST", "/api/ctype/children") => ctypes::children(self.lib, &args.str("Path")),
+            ("POST", "/api/play") => ctypes::playlist(self.lib, &args.str("Path")),
+            ("POST", "/api/durations") => {
+                ctypes::durations(&args);
+                Ok(ok())
+            }
             ("POST", "/api/shelf/tag") => shelf::tag_page(self.lib, &args.str("Name")),
             ("GET", "/api/categories") => Ok(json!({"categories": self.lib.r().categories})),
             ("POST", "/api/category/create") => shelf::create_category(self.lib, &args.str("Name"), &args.str("Color"), &args.str("Preset"))
@@ -296,7 +307,7 @@ impl Server {
                 }
                 shelf::set_tag_category(self.lib, &names, &args.str("Category")).map(|_| json!({"all": self.lib.tag_list()}))
             }
-            ("POST", "/api/shelf/tab/add") => shelf::tab_add(self.lib, &args.str("Name"), &args.str("Category"), &args.str("Label")).map(|id| json!({"id": id})),
+            ("POST", "/api/shelf/tab/add") => shelf::tab_add(self.lib, &args.str("Name"), &args.str("Category"), &args.str("Label"), &args.str("Type")).map(|id| json!({"id": id})),
             ("POST", "/api/shelf/tab/update") => shelf::tab_update(self.lib, &args).map(|_| ok()),
             ("POST", "/api/shelf/tab/delete") => shelf::tab_delete(self.lib, &args.str("Name"), &args.str("ID")).map(|_| ok()),
             ("POST", "/api/shelf/tab/move") => shelf::tab_move(self.lib, &args.str("Name"), &args.str("ID"), args.int("Dir")).map(|_| ok()),
