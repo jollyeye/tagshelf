@@ -70,6 +70,7 @@ function plBuild() {
   const knob = h('div', { class: 'plknob' });
   const tip = h('div', { class: 'pltip', hidden: true }, h('div', { class: 'pltipic' }), h('div', { class: 'pltipt' }));
   const bar = h('div', { class: 'plbar' }, h('div', { class: 'pltrack' }, fill, marks), knob, tip);
+  const strip = h('div', { class: 'plstrip', hidden: true });
   const secs = h('select', { class: 'txt small plsecs', title: 'How long each picture stays', onchange: (e) => { S.imgSecs = +e.target.value; saveSettingsSoon(); const at = PL.t; plTimeline(); PL.t = Math.min(at, itemMs(PL.items[PL.i])); plPaint(); } },
     [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30].map((v) => h('option', { value: v, selected: v === (S.imgSecs || 4) }, v + ' s per picture')));
   const el = h('div', { id: 'player', class: 'pl', tabindex: '-1' },
@@ -81,7 +82,7 @@ function plBuild() {
       h('button', { class: 'ibtn', title: 'Show in Files', onclick: () => { const p = PL.items[PL.i].p; closePlayer(); setMode('files', { noRefresh: true }).then(() => go(dirOf(p), { select: p })); } }, icon('folder', 17)),
       h('button', { class: 'ibtn', title: 'Close (Esc)', onclick: closePlayer }, icon('x', 19))),
     stage,
-    h('div', { class: 'plctl' }, bar,
+    h('div', { class: 'plctl' }, strip, bar,
       h('div', { class: 'plbtns' },
         h('button', { class: 'ibtn', title: 'Previous (←)', onclick: () => plStep(-1) }, icon('back', 18)),
         h('button', { class: 'ibtn plpp', title: 'Play / pause (Space)', onclick: () => plToggle() }, icon('play', 18)),
@@ -99,7 +100,7 @@ function plBuild() {
   bar.addEventListener('pointerdown', (ev) => { drag = true; bar.setPointerCapture(ev.pointerId); plSeek(at(ev)); });
   bar.addEventListener('pointermove', (ev) => { plTip(ev, at(ev)); if (drag) plSeek(at(ev), true); });
   bar.addEventListener('pointerup', (ev) => { if (drag) { drag = false; plSeek(at(ev)); } });
-  bar.addEventListener('pointerleave', () => { tip.hidden = true; });
+  bar.addEventListener('pointerleave', () => { tip.hidden = true; strip.hidden = true; });
   // controls fade out while playing and the mouse rests
   el.addEventListener('mousemove', plWake);
   el.addEventListener('wheel', (ev) => { ev.preventDefault(); plStep(ev.deltaY > 0 ? 1 : -1); }, { passive: false });
@@ -227,14 +228,17 @@ function plPaint() {
   const ch = plChapterAt(PL.i);
   PL.el.querySelector('.plch').textContent = plChName(ch) && (PL.data.chapters || []).length > 1 ? '· ' + plChName(ch) : '';
   const pp = PL.el.querySelector('.plpp');
-  pp.replaceChildren(PL.playing ? h('span', { class: 'ico pause' }, h('i'), h('i')) : icon('play', 18));
+  const st = PL.playing ? 'pause' : 'play';
+  if (pp.dataset.st !== st) { pp.dataset.st = st; pp.replaceChildren(PL.playing ? h('span', { class: 'ico pause' }, h('i'), h('i')) : icon('play', 18)); }
   PL.el.querySelector('.plmute').classList.toggle('off', PL.muted);
   PL.el.classList.toggle('paused', !PL.playing);
 }
 
 // ---------------------------------------------------------------- hover preview on the bar
 function plTip(ev, ms) {
+  if (PL.items.length > 1) { plStrip(ev, ms); return; }
   const tip = PL.el.querySelector('.pltip');
+  tip.classList.remove('stripmode');
   const bar = PL.el.querySelector('.plbar').getBoundingClientRect();
   tip.hidden = false;
   const x = Math.max(90, Math.min(bar.width - 90, ev.clientX - bar.left));
@@ -246,6 +250,53 @@ function plTip(ev, ms) {
   if (it.k === 'image') {
     if (pic.dataset.p !== it.p) { pic.dataset.p = it.p; pic.replaceChildren(h('img', { src: THUMB_EXT.has(it.x) ? thumbUrl(it.p, it.m) : fileUrl(it.p), alt: '' })); }
   } else plFrame(it, off, pic);
+}
+
+// ---------------------------------------------------------------- the filmstrip (several items at once)
+// One cell per picture or clip; the strip slides with the mouse so the moment under it sits under the
+// pointer. Only the cells that fit on screen exist (a few dozen, reused), so 1000 items cost the same as 10.
+const PL_CELL_W = 172, PL_CELL_GAP = 4;
+function plStrip(ev, ms) {
+  const strip = PL.el.querySelector('.plstrip'), tip = PL.el.querySelector('.pltip');
+  strip.hidden = false;
+  const sr = strip.getBoundingClientRect();
+  const W = sr.width, step = PL_CELL_W + PL_CELL_GAP;
+  const mx = Math.max(0, Math.min(W, ev.clientX - sr.left));
+  const i = plIndexAt(ms), it = PL.items[i];
+  const frac = Math.max(0, Math.min(0.999, (ms - PL.starts[i]) / itemMs(it)));
+  // the left edge of item j is at mx + (j - i - frac) * step
+  const first = Math.max(0, Math.floor(i + frac - mx / step));
+  const n = Math.ceil(W / step) + 2;
+  // a fixed pool; item j always uses cell j % n, so sliding only refills the cells that come into view
+  if (strip.children.length !== n) strip.replaceChildren(...Array.from({ length: n }, () => h('div', { class: 'plcell' }, h('div', { class: 'plcbox' }), h('span', { class: 'plcn' }))));
+  for (let k = 0; k < n; k++) {
+    const j = first + k, cell = strip.children[j % n];
+    if (j >= PL.items.length) { cell.hidden = true; continue; }
+    cell.hidden = false;
+    const x = mx + (j - i - frac) * step;
+    cell.style.transform = `translateX(${x.toFixed(1)}px)`;
+    const jt = PL.items[j];
+    const box = cell.firstChild;
+    if (cell.dataset.j !== String(j)) {
+      cell.dataset.j = j;
+      box.dataset.p = '';
+      box.replaceChildren(coverCell({ p: jt.p, k: jt.k, x: jt.x, m: jt.m }, true));
+      cell.lastChild.textContent = j + 1;
+    }
+    cell.classList.toggle('on', j === i);
+  }
+  // the clip under the pointer shows its frame at that exact moment
+  if (it.k === 'video') {
+    const cell = [...strip.children].find((c) => c.dataset.j === String(i));
+    if (cell) plFrame(it, ms - PL.starts[i], cell.firstChild);
+  }
+  // the time (and scene) under the pointer
+  tip.hidden = false;
+  tip.classList.add('stripmode');
+  const br = PL.el.querySelector('.plbar').getBoundingClientRect();
+  tip.style.left = Math.max(40, Math.min(br.width - 40, ev.clientX - br.left)) + 'px';
+  const ch = plChapterAt(i);
+  tip.querySelector('.pltipt').textContent = fmtClock(ms) + (plChName(ch) && (PL.data.chapters || []).length > 1 ? ' · ' + plChName(ch) : '');
 }
 
 // a video's frame at a moment: one hidden video does the seeking; frames are kept (per second)
