@@ -54,6 +54,15 @@ function showCurrent() {
     media.onerror = () => { stage.replaceChildren(h('div', { class: 'empty' }, h('b', {}, 'This picture can\'t be shown'), h('span', {}, 'The browser doesn\'t support this image format. Use “Open with the default app”.'))); };
   } else if (e.k === 'video') {
     media = h('video', { controls: true, autoplay: true, loop: true, src: fileUrl(e.p) });
+    // right-click: this frame as the preview of the video (when it is a scene, story...) or of its folder
+    media.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      const v = ev.currentTarget, folder = dirOf(e.p);
+      menu(ev.clientX, ev.clientY, [
+        e.c ? { label: `Use this frame as preview of “${e.n.replace(/\.[^.]+$/, '')}”`, icon: 'image', fn: () => { v.pause(); useFrameAsPreview(v, e.p, e.n.replace(/\.[^.]+$/, '')); } } : null,
+        { label: `Use this frame as preview of folder “${baseName(folder)}”`, icon: 'folder', fn: () => { v.pause(); useFrameAsPreview(v, folder, baseName(folder)); } },
+      ].filter(Boolean));
+    });
     media.onerror = () => { stage.replaceChildren(h('div', { class: 'empty' }, h('b', {}, 'This video can\'t be played here'), h('span', {}, 'The browser doesn\'t support its format. Use “Open with the default app”.'))); };
   } else {
     media = h('div', { class: 'empty' }, icon('music', 64), h('audio', { controls: true, autoplay: true, src: fileUrl(e.p) }));

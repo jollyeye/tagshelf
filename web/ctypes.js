@@ -148,3 +148,26 @@ async function openTypeFinder(root) {
     toast(counts() ? 'Marked ' + counts() : 'Nothing marked');
   } }], { wide: true });
 }
+
+// ---------------------------------------------------------------- a video frame as the preview
+// The frame on screen is saved by TagShelf (in its own data folder), not next to your files.
+function frameBlob(video) {
+  return new Promise((resolve, reject) => {
+    const w = video.videoWidth, hh = video.videoHeight;
+    if (!w || !hh) { reject(new Error('The video has no picture yet')); return; }
+    const k = Math.min(1, 1280 / Math.max(w, hh));
+    const cv = h('canvas', { width: Math.round(w * k), height: Math.round(hh * k) });
+    cv.getContext('2d').drawImage(video, 0, 0, cv.width, cv.height);
+    cv.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not read this frame'))), 'image/jpeg', 0.9);
+  });
+}
+async function useFrameAsPreview(video, target, name) {
+  try {
+    const blob = await frameBlob(video);
+    const r = await fetch('/api/cover/frame?p=' + enc(target), { method: 'POST', headers: { 'X-TagShelf': '1', 'Content-Type': 'image/jpeg' }, body: blob });
+    if (!r.ok) { let j = null; try { j = await r.json(); } catch (e) { /* text */ } throw new Error((j && j.error) || 'Could not save the frame'); }
+  } catch (e) { fail(e); return; }
+  if (typeof COVERS !== 'undefined') COVERS.delete(target);
+  toast(`This frame is now the preview of “${name}”`);
+  if (S.mode === 'shelf') shelfRefreshSoon(); else SH.home = null;
+}

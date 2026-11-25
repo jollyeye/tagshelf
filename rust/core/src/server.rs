@@ -124,6 +124,9 @@ impl Server {
         if method == "POST" && path == "/api/poster" {
             return self.poster(req, url);
         }
+        if method == "POST" && path == "/api/cover/frame" {
+            return self.frame_cover(req, url);
+        }
         let body = std::mem::take(&mut req.body);
         let args = if body.iter().all(|b| b.is_ascii_whitespace()) {
             Args(json!({}))
@@ -316,7 +319,14 @@ impl Server {
             ("POST", "/api/tag/cover") => shelf::set_tag_cover(self.lib, &args.str("Name"), &args.str("Image")).map(|_| ok()),
             ("POST", "/api/dups") => dups::find(self.lib, &args.str("Path"), args.bool("Sub"), args.bool("Hidden")),
             ("POST", "/api/covers") => Ok(covers::covers(self.lib, &args.strs("Folders"))),
-            ("POST", "/api/folder/cover") => covers::set(self.lib, &args.str("Folder"), &args.str("Image")).map(|_| ok()),
+            ("POST", "/api/folder/cover") => {
+                let folder = args.str("Folder");
+                let r = covers::set(self.lib, &folder, &args.str("Image"));
+                if r.is_ok() {
+                    self.drop_unused_frames();
+                }
+                r.map(|_| ok())
+            }
             // downloads
             ("GET", "/api/downloads") => Ok(json!({"items": self.watch.pending()})),
             ("POST", "/api/downloads/done") => self.download_done(&args),
@@ -571,6 +581,48 @@ impl Server {
     }
 
     /// Stores a still frame of a video (made by the browser) so video previews are instant next time.
+    /// A video frame (JPEG, made by the page) as the preview of a folder, scene, story or series.
+    /// Kept in <data>/frames, so nothing is added to your own folders.
+    fn frame_cover(&self, req: &mut Request, url: &Url) -> Resp {
+        let target = match clean_abs(&url.q("p")) {
+            Ok(p) => p,
+            Err(_) => return text(400, "bad path"),
+        };
+        let body = std::mem::take(&mut req.body);
+        if body.len() < 4 || body[0] != 0xFF || body[1] != 0xD8 {
+            return text(400, "expected a JPEG");
+        }
+        let dir = join(&self.data_dir, "frames");
+        let _ = std::fs::create_dir_all(&dir);
+        let dst = join(&dir, &format!("{}_{}.jpg", file_id(&target), rand_hex(4)));
+        if let Err(e) = std::fs::write(&dst, &body) {
+            return text(500, &e.to_string());
+        }
+        match covers::set(self.lib, &target, &dst) {
+            Ok(()) => {
+                self.drop_unused_frames();
+                json(&json!({"image": dst}))
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&dst);
+                error(e.code(), e.msg())
+            }
+        }
+    }
+
+    /// Deletes saved frames no preview uses any more.
+    fn drop_unused_frames(&self) {
+        let dir = join(&self.data_dir, "frames");
+        let Ok(rd) = std::fs::read_dir(&dir) else { return };
+        let used: std::collections::HashSet<String> = self.lib.r().covers.values().map(|c| lower(&c.image)).collect();
+        for de in rd.flatten() {
+            let p = join(&dir, &de.file_name().to_string_lossy());
+            if !used.contains(&lower(&p)) {
+                let _ = std::fs::remove_file(&p);
+            }
+        }
+    }
+
     fn poster(&self, req: &mut Request, url: &Url) -> Resp {
         let Some((p, md)) = Self::query_file(url) else { return text(404, "404 page not found") };
         let f = crate::store::rec_from_meta(&p, &md);

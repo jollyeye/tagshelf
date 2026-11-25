@@ -64,7 +64,7 @@ function plBuild() {
   if (PL.el) PL.el.remove();
   const d = PL.data;
   const c = CT[d.c] || CT.scene;
-  const stage = h('div', { class: 'plstage', onclick: () => plToggle() });
+  const stage = h('div', { class: 'plstage', onclick: () => plToggle(), oncontextmenu: (e) => { e.preventDefault(); plMenu(e.clientX, e.clientY); } });
   const marks = h('div', { class: 'plmarks' });
   const fill = h('div', { class: 'plfill' });
   const knob = h('div', { class: 'plknob' });
@@ -352,4 +352,19 @@ function plChapter(d) {
     if (PL.i > cur || PL.t > 1500) plShow(cur, 0);
     else plShow([...ch].reverse().find((s) => s < cur) || 0, 0);
   }
+}
+
+// right-click on the picture: use what is on screen as the scene's / story's preview
+function plMenu(x, y) {
+  const it = PL.items[PL.i], d = PL.data;
+  if (!it) return;
+  const name = d.name;
+  menu(x, y, [
+    it.k === 'video'
+      ? { label: `Use this frame as preview of “${name}”`, icon: 'image', fn: () => { if (PL.playing) plToggle(false); useFrameAsPreview(PL.media, d.p, name); } }
+      : { label: `Use this picture as preview of “${name}”`, icon: 'image', fn: () => setItemCover(d.p, it.p) },
+    { label: 'Automatic preview', icon: 'refresh', fn: () => setItemCover(d.p, '') },
+    '-',
+    { label: PL.playing ? 'Pause' : 'Play', icon: 'play', fn: () => plToggle() },
+  ]);
 }
