@@ -78,6 +78,7 @@ function ctypeMenuItems(es, x, y) {
     { label: 'Content type…', icon: 'film', fn: () => ctypeMenu(x, y, es) },
     one && canPlay(one) ? { label: 'Play ' + CT[one.c].label.toLowerCase(), icon: 'play', fn: () => openPlayer(one.p) } : null,
     one && one.c === 'series' ? { label: 'Open series page', icon: 'stack', fn: () => openItemPage(one.p) } : null,
+    one && one.c === 'story' && one.d ? { label: 'Open story page', icon: 'book', fn: () => openItemPage(one.p) } : null,
     one && one.c === 'game' ? { label: 'Launch game', icon: 'play', fn: () => launchGame(one) } : null,
     one && one.c === 'game' && one.d ? { label: 'Choose what to launch…', icon: 'gamepad', fn: () => chooseGameProgram(one) } : null,
     one && one.c && !one.d ? { label: 'Choose preview…', icon: 'image', fn: () => openItemCoverPicker(one) } : null,

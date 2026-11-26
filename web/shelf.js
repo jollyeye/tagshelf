@@ -954,8 +954,12 @@ function itemSub(it) {
 }
 
 // open a scene / story / series the way it works best
+// a story folder made of scene folders opens its page (its scenes), like a series
+const opensPage = (it) => it.d && (it.c === 'series' || (it.c === 'story' && (it.sceneDirs || 0) > 0));
+
 function openItem(it) {
   if (it.c === 'game') { launchGame(it); return; }
+  if (opensPage(it)) { openItemPage(it.p); return; }
   if (it.c === 'series') { if (it.d) openItemPage(it.p); else api('/api/open', { Path: it.p }).catch(fail); return; }
   if (it.d || it.k === 'image' || it.k === 'video') openPlayer(it.p);
   else api('/api/open', { Path: it.p }).catch(fail); // a PDF, an HTML page...: its own app
@@ -964,9 +968,10 @@ function openItem(it) {
 function itemMenu(x, y, it) {
   const e = { p: it.p, d: it.d, c: it.c, k: it.k, x: it.x, n: it.n, t: it.t };
   menu(x, y, [
-    { label: it.c === 'game' ? 'Launch' : it.c === 'series' ? 'Open' : (it.d || it.k === 'image' || it.k === 'video') ? 'Play' : 'Open', icon: it.c === 'series' ? 'stack' : 'play', fn: () => openItem(it) },
+    { label: it.c === 'game' ? 'Launch' : opensPage(it) || it.c === 'series' ? 'Open' : (it.d || it.k === 'image' || it.k === 'video') ? 'Play' : 'Open', icon: opensPage(it) ? CT[it.c].icon : 'play', fn: () => openItem(it) },
+    opensPage(it) && it.c === 'story' ? { label: 'Play the whole story', icon: 'play', fn: () => openPlayer(it.p) } : null,
     it.c === 'game' && it.d ? { label: 'Choose what to launch…', icon: 'gamepad', fn: () => chooseGameProgram(it) } : null,
-    it.d && it.c === 'story' ? { label: 'Open story page', icon: 'book', fn: () => openItemPage(it.p) } : null,
+    it.d && it.c === 'story' && !opensPage(it) ? { label: 'Open story page', icon: 'book', fn: () => openItemPage(it.p) } : null,
     it.parent ? { label: 'Go to ' + CT[it.parent.c].label.toLowerCase() + ' “' + it.parent.n + '”', icon: CT[it.parent.c].icon, fn: () => openItemPage(it.parent.p) } : null,
     '-',
     { label: 'Choose preview…', icon: 'image', fn: () => openItemCoverPicker(e) },
@@ -989,7 +994,7 @@ function itemTile(it, look, opt = {}) {
     onclick: () => openItem(it), oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); itemMenu(e.clientX, e.clientY, it); } },
     pic,
     h('span', { class: 'ctb' }, icon(c.icon, 12), h('span', {}, c.label)),
-    playable ? h('span', { class: 'iplay' }, icon('play', 22)) : null,
+    playable ? h('span', { class: 'iplay' }, icon(opensPage(it) ? CT[it.c].icon : 'play', 22)) : null,
     (it.r || 0) > 0 ? h('span', { class: 'srating' }, '★'.repeat(it.r)) : null,
     h('div', { class: 'ilbl' }, h('b', {}, it.n), h('span', {}, itemSub(it)), it.parent && !opt.noParent ? h('span', { class: 'ipar' }, icon(CT[it.parent.c].icon, 11), it.parent.n) : null));
   if (look && look.v !== 'grid') {

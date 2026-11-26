@@ -185,11 +185,17 @@ pub fn detect(lib: &Library, root: &str) -> ApiResult<Value> {
 struct Marked {
     /// id -> (path, type) for every marked item
     by_id: HashMap<String, (String, String)>,
+    /// ids of the marked folders (the rest are single files)
+    dirs: HashSet<String>,
 }
 
 impl Marked {
     fn of(d: &LibData) -> Marked {
-        Marked { by_id: d.files.values().filter(|f| !f.ctype.is_empty() && !f.missing).map(|f| (f.id.clone(), (f.path.clone(), f.ctype.clone()))).collect() }
+        let marked = d.files.values().filter(|f| !f.ctype.is_empty() && !f.missing);
+        Marked {
+            by_id: marked.clone().map(|f| (f.id.clone(), (f.path.clone(), f.ctype.clone()))).collect(),
+            dirs: marked.filter(|f| f.isdir).map(|f| f.id.clone()).collect(),
+        }
     }
     fn type_of(&self, p: &str) -> Option<&str> {
         self.by_id.get(&file_id(p)).map(|x| x.1.as_str())
@@ -298,25 +304,29 @@ fn cover_of(lib: &Library, f: &FileRec, mk: &Marked, depth: usize) -> (Option<Pi
 }
 
 /// One scene / story / series for the Shelf.
-fn item_json(lib: &Library, f: &FileRec, mk: &Marked, kids: &HashMap<String, (i64, i64)>, slow: bool) -> Value {
+fn item_json(lib: &Library, f: &FileRec, mk: &Marked, kids: &HashMap<String, (i64, i64, i64)>, slow: bool) -> Value {
     let (cover, custom) = if slow { (None, false) } else { cover_of(lib, f, mk, 0) };
-    let (scenes, stories) = kids.get(&f.id).copied().unwrap_or((0, 0));
+    let (scenes, stories, scene_dirs) = kids.get(&f.id).copied().unwrap_or((0, 0, 0));
     let media = if f.isdir && !slow { read_folder(&f.path).0.len() as i64 } else { 0 };
     let parent = mk.parent(&f.path).map(|(p, t)| json!({"p": p, "n": base_name(&p), "c": t}));
     json!({
         "p": f.path, "n": display_name(f), "c": f.ctype, "d": f.isdir, "k": f.kind, "x": f.ext, "m": f.mtime, "a": f.added,
-        "t": f.tags, "r": f.rating, "cover": cover, "custom": custom, "media": media, "scenes": scenes, "stories": stories, "parent": parent,
+        "t": f.tags, "r": f.rating, "cover": cover, "custom": custom, "media": media, "scenes": scenes, "stories": stories, "sceneDirs": scene_dirs, "parent": parent,
     })
 }
 
 /// How many marked scenes and stories sit directly under each marked folder.
-fn kid_counts(mk: &Marked) -> HashMap<String, (i64, i64)> {
-    let mut out: HashMap<String, (i64, i64)> = HashMap::new();
-    for (p, t) in mk.by_id.values() {
+/// (scenes, stories, scene folders) directly under each marked folder.
+fn kid_counts(mk: &Marked) -> HashMap<String, (i64, i64, i64)> {
+    let mut out: HashMap<String, (i64, i64, i64)> = HashMap::new();
+    for (id, (p, t)) in &mk.by_id {
         if let Some((pp, _)) = mk.parent(p) {
             let e = out.entry(file_id(&pp)).or_default();
             if t == "scene" {
                 e.0 += 1;
+                if mk.dirs.contains(id) {
+                    e.2 += 1;
+                }
             } else if t == "story" {
                 e.1 += 1;
             }
@@ -371,7 +381,7 @@ fn join_series(items: Vec<Value>) -> Vec<Value> {
         };
         let first = &mut out[i];
         first["paths"].as_array_mut().unwrap().push(json!(p));
-        for k in ["media", "scenes", "stories"] {
+        for k in ["media", "scenes", "stories", "sceneDirs"] {
             first[k] = json!(first[k].as_i64().unwrap_or(0) + it[k].as_i64().unwrap_or(0));
         }
         let mut tags: Vec<String> = first["t"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
