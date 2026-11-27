@@ -375,24 +375,57 @@ impl Server {
     }
 
     fn list(&self, url: &Url) -> ApiResult<Value> {
+        if let Some(tag) = url.q("path").strip_prefix("tag:") {
+            return self.list_tag(tag);
+        }
         let p = clean_abs(&url.q("path"))?;
         let md = std::fs::metadata(&p)?;
         if !md.is_dir() {
             return bad("that is not a folder");
         }
-        let deadline = Instant::now() + Duration::from_secs(60);
-        let (mut entries, trunc) = fsops::list_dir(&p, url.q("sub") == "1", url.q("hidden") == "1", 300_000, deadline)?;
+        // with subfolders a whole drive can hold millions of files: stop at a size the window can handle
+        let recursive = url.q("sub") == "1";
+        let (limit, secs) = if recursive { (40_000, 15) } else { (300_000, 60) };
+        let deadline = Instant::now() + Duration::from_secs(secs);
+        let (mut entries, trunc) = fsops::list_dir(&p, recursive, url.q("hidden") == "1", limit, deadline)?;
         let relinked = self.lib.annotate(&mut entries);
         // prepare thumbnails of this folder in the background
         let warm: Vec<_> = entries
             .iter()
             .filter(|e| e.k == "image" && thumbs::thumb_exts(&e.x))
+            .take(400)
             .map(|e| crate::store::FileRec { id: file_id(&e.p), path: e.p.clone(), ext: e.x.clone(), kind: e.k.clone(), size: e.s, mtime: e.m, ..Default::default() })
             .collect();
         thumbs::warm(&self.data_dir, warm);
         let parent = dir_name(&p);
         let parent = if parent == p { String::new() } else { parent };
         Ok(json!({"path": p, "parent": parent, "entries": entries, "truncated": trunc, "relinked": relinked}))
+    }
+
+    /// "tag:<name>": every file and folder that carries a tag, on any drive, from the library (no scan).
+    fn list_tag(&self, raw: &str) -> ApiResult<Value> {
+        let (name, recs) = {
+            let d = self.lib.r();
+            let want = lower(raw.trim());
+            let Some(name) = d.tags.keys().find(|k| lower(k) == want).cloned() else { return Err(ApiErr::NotFound(format!("there is no tag “{}”", raw.trim()))) };
+            let recs: Vec<(String, bool)> = d.files.values().filter(|f| f.tags.iter().any(|t| *t == name)).map(|f| (f.path.clone(), f.missing)).collect();
+            (name, recs)
+        };
+        let mut entries = vec![];
+        let mut offline = 0;
+        for (p, missing) in recs {
+            match (missing, std::fs::metadata(&p)) {
+                (false, Ok(md)) => {
+                    let mut e = fsops::entry_from(&dir_name(&p), &base_name(&p), &md);
+                    e.rel = p.clone(); // shown with its whole place
+                    entries.push(e);
+                }
+                _ => offline += 1,
+            }
+        }
+        self.lib.annotate(&mut entries);
+        entries.sort_by(|a, b| natural_cmp(&lower(&a.p), &lower(&b.p)));
+        Ok(json!({"path": format!("tag:{name}"), "parent": "", "entries": entries, "truncated": false, "tag": name, "offline": offline}))
     }
 
     fn prefs(&self, a: &Args) -> Value {

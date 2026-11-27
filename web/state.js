@@ -85,6 +85,9 @@ const selPaths = () => Array.from(S.sel);
 const selEntries = () => selPaths().map((p) => S.byPath.get(p)).filter(Boolean);
 
 // ---------------------------------------------------------------- navigation
+// "tag:<name>" is not a folder: it lists everything that carries the tag, on every drive
+const isTagView = (p = S.path) => typeof p === 'string' && p.startsWith('tag:');
+const showTagEverywhere = async (name) => { if (S.mode === 'shelf') await setMode('files', { noRefresh: true }); go('tag:' + name); };
 function listUrl(path) { return '/api/list?path=' + enc(path) + (S.sub ? '&sub=1' : '') + (S.hidden ? '&hidden=1' : ''); }
 
 async function go(path, opt = {}) {
@@ -104,7 +107,7 @@ async function go(path, opt = {}) {
   S.loading = false;
   const changedFolder = r.path !== S.path;
   if (opt.push !== false && changedFolder) { S.hist = S.hist.slice(0, S.hi + 1); S.hist.push(r.path); S.hi = S.hist.length - 1; }
-  S.path = r.path; S.parent = r.parent; S.entries = r.entries; S.truncated = r.truncated;
+  S.path = r.path; S.parent = r.parent; S.entries = r.entries; S.truncated = r.truncated; S.offline = r.offline || 0;
   indexEntries();
   if (!opt.keepSel) { S.sel.clear(); S.anchor = null; }
   if (opt.select) { for (const p of [].concat(opt.select)) if (S.byPath.has(p)) S.sel.add(p); S.anchor = [].concat(opt.select)[0]; }
@@ -113,7 +116,7 @@ async function go(path, opt = {}) {
   if (r.relinked) toast(`${r.relinked} file${r.relinked > 1 ? 's' : ''} found again after being moved - tags restored`);
   if (S.lastPath !== r.path) { S.lastPath = r.path; saveSettingsSoon(); }
   renderAll();
-  if (changedFolder) { $('#content').scrollTop = 0; revealInTree(r.path); }
+  if (changedFolder) { $('#content').scrollTop = 0; if (!isTagView(r.path)) revealInTree(r.path); }
   if (opt.select) scrollToSelected();
   if (typeof onFolderLoaded === 'function') onFolderLoaded();
 }

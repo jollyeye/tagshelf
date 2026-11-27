@@ -49,6 +49,7 @@ function modal(title, body, buttons = [], opt = {}) {
   root.append(back); root.hidden = false;
   return { close, el: box };
 }
+function closeModal() { const r = $('#modal'); r.replaceChildren(); r.hidden = true; }
 function isModalOpen() { return !$('#modal').hidden && $('#modal').children.length > 0; }
 
 function prompt(title, label, value = '', opt = {}) {

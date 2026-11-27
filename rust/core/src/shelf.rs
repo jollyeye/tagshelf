@@ -272,7 +272,7 @@ pub fn tag_page(lib: &'static Library, name: &str) -> ApiResult<Value> {
         "name": tag, "color": info.color, "category": category,
         "cover": me.and_then(|c| c.cover.clone()), "chosen": me.map(|c| c.chosen).unwrap_or(false),
         "icon": me.and_then(|c| c.icon.clone()), "banner": me.and_then(|c| c.banner.clone()),
-        "files": files, "tabs": tabs,
+        "files": files, "folders": crate::ctypes::folders_with_tag(lib, &tag), "tabs": tabs,
     }))
 }
 

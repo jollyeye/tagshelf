@@ -15,7 +15,12 @@ function segLabel(p, i) { return i === 0 ? (p.replace(/[\\/]+$/, '') || p) : bas
 function crumbsEl() {
   const box = h('div', { class: 'crumbs', onclick: (e) => { if (e.target === box || e.target.classList.contains('segs')) editAddress(); } });
   const segs = h('div', { class: 'segs' });
-  if (S.path) {
+  if (isTagView()) {
+    const t = S.path.slice(4);
+    segs.append(h('span', { class: 'tagview', title: `Everything tagged “${t}”, on every drive` + (S.offline ? `\n${S.offline} more on drives that aren't connected` : '') },
+      icon('tag', 14), h('span', { class: 'chip', style: chipStyle(tagColor(t)) }, h('span', { class: 'chip-t' }, t)),
+      h('em', {}, `everywhere · ${S.entries.length}` + (S.offline ? ` (+${S.offline} offline)` : ''))));
+  } else if (S.path) {
     ancestry(S.path).forEach((p, i, arr) => {
       if (i) segs.append(h('span', { class: 'sep' }, icon('chevR', 13)));
       const b = h('button', { class: 'seg', title: p, onclick: () => go(p) }, segLabel(p, i));
@@ -204,7 +209,7 @@ function tileEl0(e) {
       h('button', { class: 'chk', title: 'Select' }, icon('check', 13)),
       e.r ? h('span', { class: 'stars' }, '★' + e.r) : null,
       e.c ? ctBadge(e.c) : null),
-    h('div', { class: 'cap' }, h('div', { class: 'nm' }, e.n), e.rel && S.sub ? h('div', { class: 'relp' }, dirOf(e.rel) === e.rel ? '' : dirOf(e.rel)) : null,
+    h('div', { class: 'cap' }, h('div', { class: 'nm' }, e.n), e.rel && (S.sub || isTagView()) ? h('div', { class: 'relp' }, dirOf(e.rel) === e.rel ? '' : dirOf(e.rel)) : null,
       h('div', { class: 'tg' }, tagMinis(e))));
 }
 function rowEl(e) {
@@ -450,6 +455,7 @@ function confirmDelete(es, inside) {
   });
 }
 async function newFolderIn(parent) {
+  if (isTagView(parent)) { toast('Open a folder first: this view lists tagged items from everywhere'); return; }
   const name = await prompt('New folder', 'Name', 'New folder');
   if (name == null || !name.trim()) return;
   try {
@@ -467,6 +473,7 @@ function copySel(cut) {
   toast(`${es.length} item${es.length > 1 ? 's' : ''} ${cut ? 'cut' : 'copied'} - open a folder and press Ctrl+V`);
 }
 async function pasteHere(dest) {
+  if (isTagView(dest)) { toast('Open a folder first: this view lists tagged items from everywhere'); return; }
   if (!S.clip) { toast('Nothing to paste'); return; }
   const c = S.clip;
   if (c.mode === 'cut') S.clip = null;
@@ -487,6 +494,7 @@ function entryMenu(x, y) {
     '-',
     { label: 'Add tags…', icon: 'tag', fn: () => { setRightTab('tags'); setTimeout(() => { const i = $('#side .tag-in'); if (i) i.focus(); }, 50); } },
     ...ctypeMenuItems(es, x, y),
+    one && isTagView() ? { label: 'Show in its folder', icon: 'folder', fn: () => go(dirOf(one.p), { select: one.p }) } : null,
     '-',
     { label: 'Cut', icon: 'cut', key: 'Ctrl+X', fn: () => copySel(true) },
     { label: 'Copy', icon: 'copy', key: 'Ctrl+C', fn: () => copySel(false) },

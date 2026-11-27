@@ -98,6 +98,7 @@ function openTagManager() {
           try { const r = await api('/api/tag/category', { Name: t.name, Category: e.target.value }); after(r); if (S.mode === 'shelf') shelfRefresh(); } catch (er) { fail(er); }
         } }, h('option', { value: '' }, '-'), (S.categories || []).map((c) => h('option', { value: c.id, selected: c.id === t.category }, c.name)), h('option', { value: '+' }, 'New category…'))),
         h('td', { style: { textAlign: 'right', whiteSpace: 'nowrap' } },
+          h('button', { class: 'btn small', title: 'List every file and folder with this tag, on every drive', onclick: () => { closeModal(); showTagEverywhere(t.name); } }, 'Show'), ' ',
           h('button', { class: 'btn small', onclick: async () => {
             const nv = await prompt('Rename tag', 'New name', t.name, { help: 'If another tag already has this name, the two are merged.' });
             if (nv == null || !nv.trim() || nv === t.name) return;

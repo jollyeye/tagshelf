@@ -337,9 +337,18 @@ fn kid_counts(mk: &Marked) -> HashMap<String, (i64, i64, i64)> {
 
 /// Marked items that still exist, optionally only those with a tag or under a folder.
 fn marked_items(lib: &Library, keep: impl Fn(&FileRec) -> bool) -> Value {
+    items_where(lib, |f| !f.ctype.is_empty() && keep(f))
+}
+
+/// Folders that carry a tag (marked or not), for the tag page's Folders tab.
+pub fn folders_with_tag(lib: &Library, tag: &str) -> Value {
+    items_where(lib, |f| f.isdir && f.tags.iter().any(|x| x == tag))
+}
+
+fn items_where(lib: &Library, keep: impl Fn(&FileRec) -> bool) -> Value {
     let (recs, mk) = {
         let d = lib.r();
-        let recs: Vec<FileRec> = d.files.values().filter(|f| !f.ctype.is_empty() && !f.missing && keep(f)).cloned().collect();
+        let recs: Vec<FileRec> = d.files.values().filter(|f| !f.missing && keep(f)).cloned().collect();
         (recs, Marked::of(&d))
     };
     let kids = kid_counts(&mk);

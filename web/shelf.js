@@ -224,7 +224,8 @@ function categoryLayout(c) {
 function tagMenu(x, y, name) {
   const t = S.tagMap[name];
   const cur = t && t.category || '';
-  const items = [{ label: 'Open tag page', icon: 'grid', fn: () => setMode('shelf', { tag: name }) }, '-'];
+  const items = [{ label: 'Open tag page', icon: 'grid', fn: () => setMode('shelf', { tag: name }) },
+    { label: 'Show everything with this tag in Files', icon: 'folder', fn: () => showTagEverywhere(name) }, '-'];
   for (const c of S.categories || []) items.push({ label: (c.id === cur ? '✓ ' : '') + 'Category: ' + c.name, fn: () => setTagCategory([name], c.id) });
   if (cur) items.push({ label: 'No category', fn: () => setTagCategory([name], '') });
   items.push({ label: 'New category…', icon: 'plus', fn: () => newCategory([name]) });
@@ -411,6 +412,8 @@ function pageTabs(P) {
     { id: 'videos', label: 'Videos', fn: (x) => x.k === 'video' },
     { id: 'other', label: 'Other files', fn: (x) => x.k !== 'image' && x.k !== 'video', hideEmpty: true },
   ].map((t) => ({ ...t, count: n(t.fn) })).filter((t) => !t.hideEmpty || t.count > 0);
+  // folders that carry the tag themselves
+  if ((P.folders || []).length) tabs.push({ id: 'folders', label: 'Folders', count: P.folders.filter(pfPass).length, folders: true });
   for (const t of P.tabs || []) tabs.push({ id: 't:' + t.id, label: t.label, count: t.ctype === 'panel' ? panelsOf(P).filter(pfPass).length : t.ctype ? t.items.filter(pfPass).length : t.items.length, custom: t });
   return tabs;
 }
@@ -636,16 +639,17 @@ function tagPageEl(P) {
   const tabs = pageTabs(P);
   if (!tabs.find((t) => t.id === SH.tab)) SH.tab = 'all';
   const tab = tabs.find((t) => t.id === SH.tab);
-  const list = tab.custom ? P.files : sortFiles(P.files.filter(tab.fn).filter(pfPass));
+  const list = tab.custom || tab.folders ? P.files : sortFiles(P.files.filter(tab.fn).filter(pfPass));
   if (tab.custom && tab.custom.ctype) SH.byPath = new Map(P.files.map((f) => [f.p, f]));
   const pics = P.files.filter((x) => x.k === 'image').length, vids = P.files.filter((x) => x.k === 'video').length;
   const stats = [`${P.files.length} file${P.files.length === 1 ? '' : 's'}`, pics ? `${pics} picture${pics === 1 ? '' : 's'}` : null, vids ? `${vids} video${vids === 1 ? '' : 's'}` : null,
-    (() => { const n = new Set(P.files.map((x) => dirOf(x.p))).size; return n > 1 ? `in ${n} folders` : null; })()].filter(Boolean).join(' · ');
+    (() => { const n = new Set(P.files.map((x) => dirOf(x.p))).size; return n > 1 ? `in ${n} folders` : null; })(),
+    (P.folders || []).length ? `${P.folders.length} tagged folder${P.folders.length === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ');
   const catChip = h('button', { class: 'catchip', title: 'Change category', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tagMenu(r.left, r.bottom + 4, P.name); } },
     h('span', { class: 'cdot', style: { background: cat ? cat.color : '#9aa5b8' } }), cat ? cat.name : 'No category', icon('down', 12));
   const actions = h('div', { class: 'pacts' },
     SHOW_SLIDESHOW && P.files.some((x) => x.k === 'image' || x.k === 'video') ? h('button', { class: 'btn primary', onclick: () => slideshow(tab.custom ? P.files : list) }, icon('play', 14), 'Slideshow') : null,
-    h('button', { class: 'btn', onclick: () => showTagInFiles(P) }, icon('folder', 14), 'Show in Files'),
+    h('button', { class: 'btn', title: 'Every file and folder with this tag, on every drive', onclick: () => showTagEverywhere(P.name) }, icon('folder', 14), 'Show in Files'),
     h('button', { class: 'ibtn', title: 'More', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tagPageMenu(r.left, r.bottom + 4, P); } }, icon('more', 16)));
   const bannerPic = P.banner ? heroPic(P.banner) : null;
   // banner layout: your icon (if any) above the name, always shown as a transparent logo
@@ -681,7 +685,12 @@ function tagPageEl(P) {
     fixed = h('div', {}, fixed, h('div', { class: 'ttabnote' }, h('span', { class: 'muted' }, `${CT[c].many} with the tag “${P.name}”`),
       h('button', { class: 'ibtn', title: 'Tab options', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tabMenu(r.left, r.bottom + 4, P, tab.custom); } }, icon('more', 16))));
   } else if (tab.custom) [fixed, scrolling] = tabView(P, tab.custom);
-  else {
+  else if (tab.folders) {
+    const FP = { name: P.name, files: P.folders, lk: 'folders', shape: 'port' };
+    const fl = sortFiles(P.folders.filter(pfPass));
+    fixed = pageFilterBar(FP);
+    scrolling = h('div', {}, h('div', { class: 'shead' }, h('h3', {}, 'Folders'), h('em', {}, `${fl.length} folder${fl.length === 1 ? '' : 's'} with this tag`)), itemsGrid(fl, pageLook(FP)));
+  } else {
     fixed = pageFilterBar(P);
     scrolling = h('div', {}, h('div', { class: 'shead' }, h('h3', {}, tab.label), h('em', {}, `${list.length} file${list.length === 1 ? '' : 's'}` + (pfActive() ? ' match' : '') + (byMonth ? ' · by month' : ''))),
       filesGrid(list, byMonth, pageLook(P)));
@@ -944,7 +953,8 @@ async function openItemPage(path, opt = {}) {
 function itemSub(it) {
   const parts = [];
   const n = (k, one, many) => (k ? `${k} ${k === 1 ? one : many}` : null);
-  if (it.c === 'game') parts.push(it.d ? 'folder' : null);
+  if (!it.c) parts.push(n(it.media, 'picture or video', 'pictures and videos'));
+  else if (it.c === 'game') parts.push(it.d ? 'folder' : null);
   else if (it.c === 'series') parts.push(n(it.stories, 'story', 'stories'), n(it.scenes, 'scene', 'scenes'));
   else if (it.c === 'story') parts.push(n(it.scenes, 'scene', 'scenes'), n(it.media, 'panel', 'panels'));
   else parts.push(n(it.media, 'panel', 'panels'));
@@ -958,6 +968,7 @@ function itemSub(it) {
 const opensPage = (it) => it.d && (it.c === 'series' || (it.c === 'story' && (it.sceneDirs || 0) > 0));
 
 function openItem(it) {
+  if (!it.c) { setMode('files', { noRefresh: true }).then(() => go(it.p)); return; } // a plain tagged folder
   if (it.c === 'game') { launchGame(it); return; }
   if (opensPage(it)) { openItemPage(it.p); return; }
   if (it.c === 'series') { if (it.d) openItemPage(it.p); else api('/api/open', { Path: it.p }).catch(fail); return; }
@@ -968,13 +979,13 @@ function openItem(it) {
 function itemMenu(x, y, it) {
   const e = { p: it.p, d: it.d, c: it.c, k: it.k, x: it.x, n: it.n, t: it.t };
   menu(x, y, [
-    { label: it.c === 'game' ? 'Launch' : opensPage(it) || it.c === 'series' ? 'Open' : (it.d || it.k === 'image' || it.k === 'video') ? 'Play' : 'Open', icon: opensPage(it) ? CT[it.c].icon : 'play', fn: () => openItem(it) },
+    { label: !it.c ? 'Open folder' : it.c === 'game' ? 'Launch' : opensPage(it) || it.c === 'series' ? 'Open' : (it.d || it.k === 'image' || it.k === 'video') ? 'Play' : 'Open', icon: !it.c ? 'folder' : opensPage(it) ? CT[it.c].icon : 'play', fn: () => openItem(it) },
     opensPage(it) && it.c === 'story' ? { label: 'Play the whole story', icon: 'play', fn: () => openPlayer(it.p) } : null,
     it.c === 'game' && it.d ? { label: 'Choose what to launch…', icon: 'gamepad', fn: () => chooseGameProgram(it) } : null,
     it.d && it.c === 'story' && !opensPage(it) ? { label: 'Open story page', icon: 'book', fn: () => openItemPage(it.p) } : null,
     it.parent ? { label: 'Go to ' + CT[it.parent.c].label.toLowerCase() + ' “' + it.parent.n + '”', icon: CT[it.parent.c].icon, fn: () => openItemPage(it.parent.p) } : null,
     '-',
-    { label: 'Choose preview…', icon: 'image', fn: () => openItemCoverPicker(e) },
+    it.c ? { label: 'Choose preview…', icon: 'image', fn: () => openItemCoverPicker(e) } : null,
     it.custom ? { label: 'Automatic preview', icon: 'refresh', fn: () => setItemCover(it.p, '') } : null,
     { label: 'Content type…', icon: 'film', fn: () => ctypeMenu(x, y, [e]) },
     '-',
@@ -985,11 +996,12 @@ function itemMenu(x, y, it) {
   ].filter(Boolean));
 }
 
+const CT_FOLDER = { label: 'Folder', many: 'Folders', icon: 'folder', color: '#7d8597' };
 function itemTile(it, look, opt = {}) {
-  const c = CT[it.c] || CT.scene;
+  const c = CT[it.c] || CT_FOLDER;
   const pic = it.cover ? coverCell({ ...it.cover, big: (S.shelfSize || 190) * (window.devicePixelRatio || 1) > 300 }, it.cover.k === 'video')
     : h('div', { class: 'cc' }, h('div', { class: 'cc-ico' }, icon(it.d ? c.icon : 'file', 34), it.d ? null : h('em', {}, (it.x || '').replace('.', '').toUpperCase())));
-  const playable = it.c === 'game' || (it.c !== 'series' && (it.d || it.k === 'image' || it.k === 'video'));
+  const playable = !!it.c && (it.c === 'game' || (it.c !== 'series' && (it.d || it.k === 'image' || it.k === 'video')));
   const tile = h('div', { class: 'stile itile ct-' + it.c + (it.d ? ' stack' : ''), style: { '--ct': c.color }, title: it.n, dataset: { p: it.p, ct: it.c },
     onclick: () => openItem(it), oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); itemMenu(e.clientX, e.clientY, it); } },
     pic,

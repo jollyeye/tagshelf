@@ -701,3 +701,6 @@ body:has(#player) #toast { bottom: 120px; pointer-events: none; }
 .gps { font-variant-numeric: tabular-nums; }
 .gprem { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; }
 .tile.ct-game { --ct: #e5484d; }
+/* Files: everything with a tag */
+.crumbs .tagview { display: inline-flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 13.5px; white-space: nowrap; }
+.crumbs .tagview em { font-style: normal; color: var(--muted); font-size: 12.5px; }
