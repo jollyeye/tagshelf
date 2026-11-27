@@ -396,6 +396,38 @@ async function fsTransfer(paths, dest, copy) {
     if (S.sel.size === 0) renderSide();
   } catch (e) { fail(e); }
 }
+// a new folder next to the selected items, with them moved into it (tags, marks and previews follow)
+async function moveIntoNewFolder(es) {
+  if (!es.length) return;
+  const dirs = [...new Set(es.map((e) => dirOf(e.p)))];
+  let parent = isTagView() ? null : S.path;
+  if (!parent || (S.sub && dirs.length === 1)) parent = dirs.length === 1 ? dirs[0] : null;
+  if (!parent) { toast('These items are in different folders - select items from one folder'); return; }
+  const suggest = es.length === 1 ? es[0].n.replace(/\.[^.]+$/, '') : 'New folder';
+  const name = await prompt(`Move ${es.length === 1 ? '“' + es[0].n + '”' : es.length + ' items'} into a new folder`, 'Folder name', suggest, { ok: 'Move' });
+  if (name == null || !name.trim()) return;
+  let dir;
+  try { dir = (await api('/api/mkdir', { Parent: parent, Name: name.trim() })).path; } catch (e) { fail(e); return; }
+  let r;
+  try { r = await api('/api/move', { Paths: es.map((e) => e.p), Dest: dir }); } catch (e) { fail(e); r = { done: [] }; }
+  const done = r.done || [];
+  if (r.errors && r.errors.length) toast(r.errors[0] + (r.errors.length > 1 ? ` (and ${r.errors.length - 1} more)` : ''), { error: true });
+  else toast(`Moved ${done.length} item${done.length === 1 ? '' : 's'} into “${baseName(dir)}”`);
+  if (done.length) {
+    pushUndo('move into new folder', async () => {
+      for (const pr of done) await api('/api/move', { Paths: [pr.to], Dest: dirOf(pr.from) });
+      // the folder goes too, but only if nothing else was put in it meanwhile
+      try { const l = await api('/api/list?path=' + enc(dir) + '&hidden=1'); if (!(l.entries || []).length) await api('/api/trash', { Paths: [dir] }); } catch (e) { /* keep it */ }
+      await refresh(); afterFsDirs([parent]);
+    });
+  }
+  S.sel = new Set();
+  await refresh();
+  afterFsDirs([parent, dir]);
+  if (S.byPath.has(dir)) { selectOnly(dir); scrollToSelected(); }
+  renderSide();
+}
+
 async function doRename(e) {
   const nv = await prompt(e.d ? 'Rename folder' : 'Rename', 'New name', e.n, { selectStem: !e.d });
   if (nv == null || nv.trim() === '' || nv === e.n) return;
@@ -497,6 +529,7 @@ function entryMenu(x, y) {
     one && isTagView() ? { label: 'Show in its folder', icon: 'folder', fn: () => go(dirOf(one.p), { select: one.p }) } : null,
     '-',
     { label: 'Cut', icon: 'cut', key: 'Ctrl+X', fn: () => copySel(true) },
+    { label: 'Move into new folder…', icon: 'newfolder', fn: () => moveIntoNewFolder(es) },
     { label: 'Copy', icon: 'copy', key: 'Ctrl+C', fn: () => copySel(false) },
     { label: one && one.d ? 'Paste into folder' : 'Paste', icon: 'paste', key: 'Ctrl+V', disabled: !S.clip, fn: () => pasteHere(one && one.d ? one.p : S.path) },
     '-',
