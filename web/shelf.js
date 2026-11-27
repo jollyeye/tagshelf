@@ -412,8 +412,16 @@ function pageTabs(P) {
     { id: 'videos', label: 'Videos', fn: (x) => x.k === 'video' },
     { id: 'other', label: 'Other files', fn: (x) => x.k !== 'image' && x.k !== 'video', hideEmpty: true },
   ].map((t) => ({ ...t, count: n(t.fn) })).filter((t) => !t.hideEmpty || t.count > 0);
-  // folders that carry the tag themselves
-  if ((P.folders || []).length) tabs.push({ id: 'folders', label: 'Folders', count: P.folders.filter(pfPass).length, folders: true });
+  // a tab for each content type that has something with this tag (unless you added that tab yourself)
+  const mine = new Set((P.tabs || []).map((t) => t.ctype).filter(Boolean));
+  for (const c of CT_MARKS) {
+    if (mine.has(c)) continue;
+    const items = (P.marked || []).filter((x) => x.c === c);
+    if (items.length) tabs.push({ id: 'auto:' + c, label: CT[c].many, count: items.filter(pfPass).length, custom: { ctype: c, items, label: CT[c].many, auto: true } });
+  }
+  // plain folders that carry the tag themselves (marked ones have their own tab)
+  const plain = (P.folders || []).filter((f) => !f.c);
+  if (plain.length) tabs.push({ id: 'folders', label: 'Folders', count: plain.filter(pfPass).length, folders: true });
   for (const t of P.tabs || []) tabs.push({ id: 't:' + t.id, label: t.label, count: t.ctype === 'panel' ? panelsOf(P).filter(pfPass).length : t.ctype ? t.items.filter(pfPass).length : t.items.length, custom: t });
   return tabs;
 }
@@ -669,9 +677,9 @@ function tagPageEl(P) {
   } else {
     hero = h('div', { class: 'phero plain' }, info);
   }
-  const tabBar = h('div', { class: 'ptabs' }, tabs.map((t) => h('button', { class: 'ptab' + (t.id === SH.tab ? ' on' : '') + (t.custom ? ' custom' : ''), dataset: { tab: t.id },
+  const tabBar = h('div', { class: 'ptabs' }, tabs.map((t) => h('button', { class: 'ptab' + (t.id === SH.tab ? ' on' : '') + (t.custom && !t.custom.auto ? ' custom' : '') + (t.custom && t.custom.auto ? ' auto' : ''), dataset: { tab: t.id },
     onclick: () => { SH.tab = t.id; SH.shown = PAGE_CHUNK; renderShelf(); },
-    oncontextmenu: t.custom ? (e) => { e.preventDefault(); tabMenu(e.clientX, e.clientY, P, t.custom); } : null },
+    oncontextmenu: t.custom && !t.custom.auto ? (e) => { e.preventDefault(); tabMenu(e.clientX, e.clientY, P, t.custom); } : null },
     t.custom && t.custom.ctype ? h('span', { class: 'ctico', style: { '--ct': CT[t.custom.ctype].color } }, icon(CT[t.custom.ctype].icon, 13)) : null,
     t.custom && t.custom.category ? h('span', { class: 'cdot', style: { background: t.custom.category.color } }) : null, t.label, h('em', {}, t.count))),
     h('button', { class: 'ptab add', title: 'Add a tab that lists the tags of a category', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); addTabMenu(r.left, r.bottom + 4, P); } }, icon('plus', 14), 'Add tab'));
@@ -682,12 +690,13 @@ function tagPageEl(P) {
     const c = tab.custom.ctype;
     const all = c === 'panel' ? panelsOf(P) : tab.custom.items;
     [fixed, scrolling] = typeListView({ name: P.name, files: all, lk: typeLookKey(c), shape: CT_SHAPE[c] }, c, all);
-    fixed = h('div', {}, fixed, h('div', { class: 'ttabnote' }, h('span', { class: 'muted' }, `${CT[c].many} with the tag “${P.name}”`),
-      h('button', { class: 'ibtn', title: 'Tab options', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tabMenu(r.left, r.bottom + 4, P, tab.custom); } }, icon('more', 16))));
+    fixed = h('div', {}, fixed, h('div', { class: 'ttabnote' }, h('span', { class: 'muted' }, `${CT[c].many} with the tag “${P.name}”` + (tab.custom.auto ? ' (shown automatically)' : '')),
+      tab.custom.auto ? null : h('button', { class: 'ibtn', title: 'Tab options', onclick: (e) => { const r = e.currentTarget.getBoundingClientRect(); tabMenu(r.left, r.bottom + 4, P, tab.custom); } }, icon('more', 16))));
   } else if (tab.custom) [fixed, scrolling] = tabView(P, tab.custom);
   else if (tab.folders) {
-    const FP = { name: P.name, files: P.folders, lk: 'folders', shape: 'port' };
-    const fl = sortFiles(P.folders.filter(pfPass));
+    const plain = P.folders.filter((f) => !f.c);
+    const FP = { name: P.name, files: plain, lk: 'folders', shape: 'port' };
+    const fl = sortFiles(plain.filter(pfPass));
     fixed = pageFilterBar(FP);
     scrolling = h('div', {}, h('div', { class: 'shead' }, h('h3', {}, 'Folders'), h('em', {}, `${fl.length} folder${fl.length === 1 ? '' : 's'} with this tag`)), itemsGrid(fl, pageLook(FP)));
   } else {

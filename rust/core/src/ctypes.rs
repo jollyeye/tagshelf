@@ -340,6 +340,11 @@ fn marked_items(lib: &Library, keep: impl Fn(&FileRec) -> bool) -> Value {
     items_where(lib, |f| !f.ctype.is_empty() && keep(f))
 }
 
+/// Scenes, stories, series and games that carry a tag (the tag page shows a tab for each type found).
+pub fn marked_with_tag(lib: &Library, tag: &str) -> Value {
+    marked_items(lib, |f| f.tags.iter().any(|x| x == tag))
+}
+
 /// Folders that carry a tag (marked or not), for the tag page's Folders tab.
 pub fn folders_with_tag(lib: &Library, tag: &str) -> Value {
     items_where(lib, |f| f.isdir && f.tags.iter().any(|x| x == tag))
